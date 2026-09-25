@@ -138,9 +138,9 @@ no real screenshot is ever published.
 
 ## Credits
 
-Made by [Lucibe](https://lucibe.com), built with [Claude Code](https://claude.com/claude-code).
-Inspired by CleanShot X; not affiliated with CleanShot X or its makers.
+Made by [Zincoo](https://zincoo.com) · Lucian Roman
 
 ## License
 
-[GPL-3.0-or-later](LICENSE)
+Copyright © 2026 Lucian Roman, [Zincoo](https://zincoo.com).
+Released under the [GPL-3.0-or-later](LICENSE).
