@@ -3,7 +3,8 @@
 //
 // Watches the folder where GNOME saves screenshots (~/Pictures/Screenshots) and
 // shows the newest ones as cards. Drag a card into any app to hand it the file.
-// Hover a card for Copy, Open and Dismiss. Nothing on disk is ever deleted.
+// Hover a card for Copy, Open, Send to a server and Dismiss; "Bring back" returns
+// cards that left. Nothing on disk is ever deleted.
 //
 // The GNOME Shell add-on (../extension.js) starts this with --managed and pins its
 // window in the bottom-left corner. Without the add-on it runs as an ordinary
@@ -16,12 +17,18 @@ import GdkPixbuf from 'gi://GdkPixbuf';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk?version=4.0';
+import Pango from 'gi://Pango';
 import Gettext from 'gettext';
 import System from 'system';
 
-const APP_ID = 'com.lucibe.ScreenshotTray';
+import {showAbout, showHelp} from './help.js';
+import {sshHosts, uploadToServer} from './servers.js';
+
+const APP_ID = 'com.zincoo.ScreenshotTray';
+const ADDON_UUID = 'screenshot-tray@zincoo.com';
 const MANAGED = System.programArgs.includes('--managed');
 const MAX_CARDS = 5;
+const MAX_CLOSED = 20;          // how many cards that left "Bring back" remembers
 const CARD_MAX_WIDTH = 220;     // logical pixels
 const CARD_MAX_HEIGHT = 140;
 const CARD_MIN_WIDTH = 120;
@@ -81,6 +88,8 @@ class Card {
         this.path = path;
         this._file = Gio.File.new_for_path(path);
         this._copiedId = 0;
+        this._statusId = 0;
+        this._destroyed = false;
         this._hotspot = [0, 0];
         this._dragRefused = false;
 
@@ -164,6 +173,49 @@ class Card {
         actions.append(this._copyButton);
         actions.append(open);
 
+        // Send to a server: one click with one server, a short list with several.
+        const hosts = tray.hosts;
+        if (hosts.length > 0) {
+            this._sendButton = new Gtk.Button({
+                icon_name: 'network-server-symbolic',
+                tooltip_text: hosts.length === 1 ? `Send to ${hosts[0]}` : 'Send to a server',
+                css_classes: ['osd', 'circular', 'card-button'],
+            });
+            if (hosts.length === 1) {
+                this._sendButton.connect('clicked', () => this._send(hosts[0]));
+            } else {
+                const list = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL});
+                this._hostsPopover = new Gtk.Popover({child: list});
+                this._hostsPopover.set_parent(this._sendButton);
+                for (const host of hosts) {
+                    const item = new Gtk.Button({label: host, css_classes: ['flat']});
+                    item.connect('clicked', () => {
+                        this._hostsPopover.popdown();
+                        this._send(host);
+                    });
+                    list.append(item);
+                }
+                this._sendButton.connect('clicked', () => this._hostsPopover.popup());
+            }
+            actions.append(this._sendButton);
+        }
+
+        // A short message across the top of the card, e.g. "Sending…" or "Path copied".
+        this._status = new Gtk.Label({
+            visible: false,
+            wrap: true,
+            wrap_mode: Pango.WrapMode.WORD_CHAR,
+            lines: 3,
+            ellipsize: Pango.EllipsizeMode.END,
+            xalign: 0,
+            halign: Gtk.Align.FILL,
+            valign: Gtk.Align.START,
+            margin_top: 6,
+            margin_start: 6,
+            margin_end: 42,
+            css_classes: ['osd', 'card-status'],
+        });
+
         this.widget = new Gtk.Overlay({
             child: sized,
             halign: Gtk.Align.START,
@@ -173,13 +225,52 @@ class Card {
             css_classes: ['card'],
         });
         this.widget.add_overlay(actions);
+        this.widget.add_overlay(this._status);
         this.widget.add_overlay(dismiss);
     }
 
     destroy() {
-        if (this._copiedId)
-            GLib.source_remove(this._copiedId);
-        this._copiedId = 0;
+        this._destroyed = true;
+        for (const id of [this._copiedId, this._statusId]) {
+            if (id)
+                GLib.source_remove(id);
+        }
+        this._copiedId = this._statusId = 0;
+        this._hostsPopover?.unparent();
+        this._hostsPopover = null;
+    }
+
+    _say(message, forMs) {
+        if (this._destroyed)
+            return;
+        this._status.label = message;
+        this._status.visible = true;
+        if (this._statusId)
+            GLib.source_remove(this._statusId);
+        this._statusId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, forMs, () => {
+            this._statusId = 0;
+            this._status.visible = false;
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    // Uploads the screenshot to the server and copies its path there, ready to paste
+    // into Claude Code or Codex running on that server. The card stays in the tray.
+    async _send(host) {
+        this._sendButton.sensitive = false;
+        this._say(`Sending to ${host}…`, 30000);
+        try {
+            const remotePath = await uploadToServer(this.path, host);
+            Gdk.Display.get_default().get_clipboard().set_text(remotePath);
+            log(`sent ${GLib.path_get_basename(this.path)} to ${host}: ${remotePath}`);
+            this._say(`On ${host}. Its path is copied: paste it there (Ctrl+Shift+V).`, 4000);
+        } catch (e) {
+            log(`could not send ${GLib.path_get_basename(this.path)} to ${host}: ${e.message}`);
+            this._say(e.message, 8000);
+        } finally {
+            if (!this._destroyed)
+                this._sendButton.sensitive = true;
+        }
     }
 
     // What an app receives when the card is dropped on it: the file's address in
@@ -224,6 +315,7 @@ class Card {
 class Tray {
     constructor(app) {
         this._cards = [];                 // oldest first; the newest sits nearest the corner
+        this._closed = [];                // paths of cards that left, the latest last
         this._waiting = new Map();        // path -> timeout id, for files still being written
 
         this._window = new Gtk.ApplicationWindow({
@@ -242,13 +334,24 @@ class Tray {
             return false;
         });
 
+        this._bringBack = new Gtk.Button({
+            label: 'Bring back',
+            tooltip_text: 'Bring back the last card that left the tray',
+            visible: false,
+            css_classes: ['osd', 'pill', 'tray-pill'],
+        });
+        this._bringBack.connect('clicked', () => this.restoreLast());
+
         this._clearAll = new Gtk.Button({
             label: 'Clear all',
-            halign: Gtk.Align.START,
             visible: false,
-            css_classes: ['osd', 'pill', 'clear-all'],
+            css_classes: ['osd', 'pill', 'tray-pill'],
         });
         this._clearAll.connect('clicked', () => this.clear());
+
+        this._header = new Gtk.Box({spacing: 8, halign: Gtk.Align.START, visible: false});
+        this._header.append(this._bringBack);
+        this._header.append(this._clearAll);
 
         this._placeholder = new Gtk.Label({
             label: 'Your next screenshots will appear here',
@@ -265,9 +368,15 @@ class Tray {
             spacing: 10,
             css_classes: ['tray-box'],
         });
-        this._box.append(this._clearAll);
+        this._box.append(this._header);
         this._box.append(this._placeholder);
         this._window.set_child(this._box);
+    }
+
+    // Read fresh for each new card, so a server added to ~/.ssh/config shows up
+    // without restarting the tray.
+    get hosts() {
+        return sshHosts();
     }
 
     watch() {
@@ -293,14 +402,18 @@ class Tray {
     }
 
     restore() {
-        let paths = [];
+        let state = {};
         try {
             const [, contents] = GLib.file_get_contents(STATE_FILE);
-            paths = JSON.parse(new TextDecoder().decode(contents));
+            state = JSON.parse(new TextDecoder().decode(contents));
         } catch {
             // first run, or nothing saved
         }
-        for (const path of Array.isArray(paths) ? paths : []) {
+        // Older versions saved just the list of cards.
+        const cards = Array.isArray(state) ? state : state?.cards ?? [];
+        const closed = Array.isArray(state?.closed) ? state.closed : [];
+        this._closed = closed.filter(path => typeof path === 'string').slice(-MAX_CLOSED);
+        for (const path of Array.isArray(cards) ? cards : []) {
             try {
                 if (typeof path === 'string' && ageInHours(path) < RESTORE_MAX_AGE_HOURS)
                     this._add(new Card(this, path));
@@ -344,13 +457,40 @@ class Tray {
         });
     }
 
-    // Started again from the app list while already running: bring the recent
-    // screenshots back if the tray is empty, and show the window.
+    // Started again from the app list while already running: if the tray is empty,
+    // bring back the last card that left (or else the newest screenshots), and show it.
     bringBack() {
-        if (this._cards.length === 0)
+        if (this._cards.length === 0 && !this.restoreLast())
             this.preload(3);
         if (!MANAGED)
             this._window.present();
+    }
+
+    // Brings back the card that left most recently. Returns false if there is none.
+    restoreLast() {
+        while (this._closed.length > 0) {
+            const path = this._closed.pop();
+            if (this._has(path) || !GLib.file_test(path, GLib.FileTest.EXISTS))
+                continue;
+            try {
+                this._add(new Card(this, path));
+            } catch {
+                continue;
+            }
+            this._update();
+            return true;
+        }
+        this._update();
+        return false;
+    }
+
+    openFolder() {
+        try {
+            Gio.AppInfo.launch_default_for_uri(Gio.File.new_for_path(SCREENSHOTS_DIR).get_uri(),
+                this._window.get_display().get_app_launch_context());
+        } catch (e) {
+            log(`cannot open ${SCREENSHOTS_DIR}: ${e.message}`);
+        }
     }
 
     dismiss(card) {
@@ -415,15 +555,22 @@ class Tray {
             this._remove(this._cards[0]);
     }
 
-    _remove(card) {
+    // A card that leaves is remembered for "Bring back", unless its file is gone.
+    _remove(card, remember = true) {
         const index = this._cards.indexOf(card);
         if (index < 0)
             return;
         this._cards.splice(index, 1);
         this._box.remove(card.widget);
         card.destroy();
+        if (remember) {
+            this._closed = this._closed.filter(path => path !== card.path);
+            this._closed.push(card.path);
+            this._closed.splice(0, Math.max(0, this._closed.length - MAX_CLOSED));
+        }
     }
 
+    // The file was deleted or moved away: drop its card and forget it entirely.
     _forget(path) {
         if (!path)
             return;
@@ -431,15 +578,17 @@ class Tray {
             GLib.source_remove(this._waiting.get(path));
             this._waiting.delete(path);
         }
+        this._closed = this._closed.filter(closedPath => closedPath !== path);
         const card = this._cards.find(c => c.path === path);
-        if (card) {
-            this._remove(card);
-            this._update();
-        }
+        if (card)
+            this._remove(card, false);
+        this._update();
     }
 
     _update() {
+        this._bringBack.visible = this._closed.length > 0;
         this._clearAll.visible = this._cards.length >= 2;
+        this._header.visible = this._bringBack.visible || this._clearAll.visible;
         this._placeholder.visible = !MANAGED && this._cards.length === 0;
         // Pinned: shown without asking for the keyboard, hidden when empty.
         // Ordinary window: always shown, so it stays where it was put.
@@ -450,11 +599,31 @@ class Tray {
     _save() {
         try {
             GLib.mkdir_with_parents(GLib.path_get_dirname(STATE_FILE), 0o700);
-            const json = JSON.stringify(this._cards.map(card => card.path));
+            const json = JSON.stringify({cards: this._cards.map(card => card.path), closed: this._closed});
             GLib.file_set_contents(STATE_FILE, new TextEncoder().encode(json));
         } catch (e) {
             log(`cannot remember the cards: ${e.message}`);
         }
+    }
+}
+
+// Started from the app list while the add-on is switched off (after "Quit" in its
+// top-bar menu): switch the add-on back on, which starts the pinned tray. Returns
+// false when there's nothing to switch on, and the tray then opens as a window.
+function switchAddOnOn() {
+    const call = (method, replyType) => Gio.DBus.session.call_sync(
+        'org.gnome.Shell.Extensions', '/org/gnome/Shell/Extensions', 'org.gnome.Shell.Extensions',
+        method, new GLib.Variant('(s)', [ADDON_UUID]), new GLib.VariantType(replyType),
+        Gio.DBusCallFlags.NONE, 3000, null).recursiveUnpack();
+    try {
+        const [info] = call('GetExtensionInfo', '(a{sv})');
+        // 2 = switched off, 6 = loaded but never switched on (GNOME's ExtensionState)
+        if (info.state !== 2 && info.state !== 6)
+            return false;
+        const [switchedOn] = call('EnableExtension', '(b)');
+        return switchedOn;
+    } catch {
+        return false;   // no GNOME Shell to ask, e.g. in the README-image sandbox
     }
 }
 
@@ -486,6 +655,20 @@ app.connect('startup', () => {
         tray.preload(preloadCount);
     if (renderPath)
         tray.renderTo(renderPath);
+
+    // What the top-bar menu (in the add-on) can ask the tray to do.
+    for (const [name, run] of [
+        ['restore-last', () => tray.restoreLast()],
+        ['show-recent', () => tray.preload(3)],
+        ['clear', () => tray.clear()],
+        ['open-folder', () => tray.openFolder()],
+        ['help', () => showHelp()],
+        ['about', () => showAbout()],
+    ]) {
+        const action = new Gio.SimpleAction({name});
+        action.connect('activate', () => run());
+        app.add_action(action);
+    }
     app.hold();     // keep running while the tray is empty and hidden
 });
 app.connect('activate', () => {
@@ -494,4 +677,7 @@ app.connect('activate', () => {
         tray.bringBack();
 });
 
-await app.runAsync([System.programInvocationName]);
+if (!MANAGED && !renderPath && preloadCount === 0 && switchAddOnOn())
+    log('the add-on was switched off; switched it back on, and it starts the tray');
+else
+    await app.runAsync([System.programInvocationName]);

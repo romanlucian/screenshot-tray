@@ -36,9 +36,15 @@ window.screenshot-tray {
     padding: 0;
 }
 
-.clear-all {
+.tray-pill {
     min-height: 0;
     padding: 4px 14px;
     font-size: 0.9em;
     font-weight: bold;
+}
+
+.card-status {
+    padding: 4px 8px;
+    border-radius: 8px;
+    font-size: 0.85em;
 }

@@ -4,7 +4,7 @@
 # Adds one link and one entry in GNOME's list of add-ons; uninstall.sh removes both.
 set -euo pipefail
 
-UUID=screenshot-tray@lucibe.com
+UUID=screenshot-tray@zincoo.com
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LINK="$HOME/.local/share/gnome-shell/extensions/$UUID"
 
@@ -21,14 +21,18 @@ mkdir -p "$(dirname "$LINK")"
 ln -sfn "$HERE/extension" "$LINK"
 
 # The app's icon and its entry in the app list.
-ICON="$HOME/.local/share/icons/hicolor/scalable/apps/com.lucibe.ScreenshotTray.svg"
-LAUNCHER="$HOME/.local/share/applications/com.lucibe.ScreenshotTray.desktop"
+ICON="$HOME/.local/share/icons/hicolor/scalable/apps/com.zincoo.ScreenshotTray.svg"
+LAUNCHER="$HOME/.local/share/applications/com.zincoo.ScreenshotTray.desktop"
 mkdir -p "$(dirname "$ICON")" "$(dirname "$LAUNCHER")"
-ln -sfn "$HERE/data/com.lucibe.ScreenshotTray.svg" "$ICON"
-sed "s|@APP@|$HERE/extension/app/main.js|" "$HERE/data/com.lucibe.ScreenshotTray.desktop.in" > "$LAUNCHER"
+ln -sfn "$HERE/data/com.zincoo.ScreenshotTray.svg" "$ICON"
+sed "s|@APP@|$HERE/extension/app/main.js|" "$HERE/data/com.zincoo.ScreenshotTray.desktop.in" > "$LAUNCHER"
 
 enabled=$(gsettings get org.gnome.shell enabled-extensions)
 updated=$(python3 "$HERE/scripts/extension_list.py" add "$UUID" "$enabled")
 gsettings set org.gnome.shell enabled-extensions "$updated"
+# "Quit" in the top-bar menu puts it on GNOME's "off" list, which wins over "on".
+disabled=$(gsettings get org.gnome.shell disabled-extensions)
+updated=$(python3 "$HERE/scripts/extension_list.py" remove "$UUID" "$disabled")
+gsettings set org.gnome.shell disabled-extensions "$updated"
 
 echo "Installed. Log out and back in once; after that the tray starts by itself."

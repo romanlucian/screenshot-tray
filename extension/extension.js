@@ -9,16 +9,23 @@
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import Meta from 'gi://Meta';
+import St from 'gi://St';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
+import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
+const APP_ID = 'com.zincoo.ScreenshotTray';
+const APP_PATH = '/com/zincoo/ScreenshotTray';
+const TRAY_TITLE = 'Screenshot Tray';   // the tray window's title in app/main.js
 const MARGIN = 16;              // logical pixels from the screen edges
 const QUICK_EXIT_MS = 10000;    // a tray that stops sooner than this counts as a crash
 const MAX_CRASHES = 5;          // after that, leave it off until the next login
 
 export default class ScreenshotTray extends Extension {
     enable() {
-        this._windows = new Map();      // MetaWindow -> its signal ids
+        this._windows = new Map();      // MetaWindow -> {ids: its signal ids, pinned}
         this._crashes = 0;
         this._restartId = 0;
         this._client = null;
@@ -28,10 +35,53 @@ export default class ScreenshotTray extends Extension {
             global.display.connect('window-created', (_display, window) => this._adopt(window)),
             global.display.connect('workareas-changed', () => this._placeAll()),
         ];
+        this._addTopBarMenu();
         this._start();
     }
 
+    // An icon in the top bar, so the tray can be reached even while it is hidden.
+    _addTopBarMenu() {
+        this._indicator = new PanelMenu.Button(0.0, 'Screenshot Tray', false);
+        this._indicator.add_child(new St.Icon({
+            gicon: Gio.icon_new_for_string(GLib.build_filenamev([this.path, 'icons', 'screenshot-tray-symbolic.svg'])),
+            style_class: 'system-status-icon',
+        }));
+        const menu = this._indicator.menu;
+        menu.addAction('Bring back the last closed', () => this._askTray('restore-last'));
+        menu.addAction('Show the newest screenshots', () => this._askTray('show-recent'));
+        menu.addAction('Clear the tray', () => this._askTray('clear'));
+        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        menu.addAction('Open the Screenshots folder', () => this._askTray('open-folder'));
+        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        menu.addAction('How to use…', () => this._askTray('help'));
+        menu.addAction('About Screenshot Tray', () => this._askTray('about'));
+        menu.addAction('Quit Screenshot Tray', () => this._quit());
+        Main.panel.addToStatusArea(this.uuid, this._indicator);
+    }
+
+    // Switches the add-on off, so the tray and this icon go, also after the next
+    // login. Starting Screenshot Tray from the app list switches it back on.
+    _quit() {
+        // Wait until the menu has closed before the icon is taken away.
+        GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+            Main.extensionManager.disableExtension(this.uuid);
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    // Runs one of the tray's own actions (see app/main.js) over the session bus.
+    _askTray(action) {
+        try {
+            Gio.DBusActionGroup.get(Gio.DBus.session, APP_ID, APP_PATH).activate_action(action, null);
+        } catch (e) {
+            console.error(`Screenshot Tray: ${e.message}`);
+        }
+    }
+
     disable() {
+        this._indicator?.destroy();
+        this._indicator = null;
+
         if (this._restartId)
             GLib.source_remove(this._restartId);
         this._restartId = 0;
@@ -39,7 +89,7 @@ export default class ScreenshotTray extends Extension {
         this._displayIds.forEach(id => global.display.disconnect(id));
         this._displayIds = null;
 
-        for (const [window, ids] of this._windows)
+        for (const [window, {ids}] of this._windows)
             ids.forEach(id => window.disconnect(id));
         this._windows = null;
 
@@ -92,27 +142,40 @@ export default class ScreenshotTray extends Extension {
         });
     }
 
+    // Pins the tray's own window. Its other windows (How to use, About) stay ordinary.
+    // The title can arrive just after the window, so it's checked again when it changes.
     _adopt(window) {
         if (!this._client?.owns_window(window))
             return;
-        try {
-            window.set_type(Meta.WindowType.UTILITY);   // never takes the keyboard when it appears
-            window.hide_from_window_list();             // not in Alt+Tab or the dock
-            window.stick();                             // on every workspace
-            window.make_above();                        // above ordinary windows
-        } catch (e) {
-            console.error(`Screenshot Tray: ${e.message}`);
-        }
-        this._windows.set(window, [
-            window.connect('shown', () => this._place(window)),
-            window.connect('size-changed', () => this._place(window)),
-            window.connect('unmanaged', () => this._windows?.delete(window)),
-        ]);
+        const entry = {ids: [], pinned: false};
+        const pinIfTray = () => {
+            if (entry.pinned || window.get_title() !== TRAY_TITLE)
+                return;
+            entry.pinned = true;
+            try {
+                window.set_type(Meta.WindowType.UTILITY);   // never takes the keyboard when it appears
+                window.hide_from_window_list();             // not in Alt+Tab or the dock
+                window.stick();                             // on every workspace
+                window.make_above();                        // above ordinary windows
+            } catch (e) {
+                console.error(`Screenshot Tray: ${e.message}`);
+            }
+            this._place(window);
+        };
+        entry.ids.push(
+            window.connect('notify::title', pinIfTray),
+            window.connect('shown', () => entry.pinned && this._place(window)),
+            window.connect('size-changed', () => entry.pinned && this._place(window)),
+            window.connect('unmanaged', () => this._windows?.delete(window)));
+        this._windows.set(window, entry);
+        pinIfTray();
     }
 
     _placeAll() {
-        for (const window of this._windows.keys())
-            this._place(window);
+        for (const [window, {pinned}] of this._windows) {
+            if (pinned)
+                this._place(window);
+        }
     }
 
     _place(window) {

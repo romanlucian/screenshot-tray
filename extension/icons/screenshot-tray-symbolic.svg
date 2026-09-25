@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- Screenshot Tray, top-bar version: a screenshot with a picture, one more behind it. -->
+  <path fill="#2e3436" d="M6 1.5h6.5A2 2 0 0 1 14.5 3.5V10H13V3.5a.5.5 0 0 0-.5-.5H6z"/>
+  <path fill="#2e3436" fill-rule="evenodd" d="M3.5 4.5h7a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2zm0 1.5a.5.5 0 0 0-.5.5v6a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5v-6a.5.5 0 0 0-.5-.5z"/>
+  <path fill="#2e3436" d="M3.5 12.5l2.5-3.25 1.75 1.75 1.25-1.25 2 2.75z"/>
+  <circle fill="#2e3436" cx="8.9" cy="7.9" r="1"/>
+</svg>
