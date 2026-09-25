@@ -1,0 +1,7 @@
+{
+  "uuid": "screenshot-tray@lucibe.com",
+  "name": "Screenshot Tray",
+  "description": "Keeps your latest screenshots floating in the bottom-left corner, ready to drag into any app.",
+  "shell-version": ["50"],
+  "version": 1
+}

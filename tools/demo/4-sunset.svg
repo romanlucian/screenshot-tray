@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+  <!-- Demo "screenshot": a sunset print. -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2B1055"/>
+      <stop offset="0.45" stop-color="#7A2E8E"/>
+      <stop offset="0.78" stop-color="#F0735A"/>
+      <stop offset="1" stop-color="#FFC77D"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFE9B0" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#FFE09A" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lake" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E88A6A"/>
+      <stop offset="1" stop-color="#3A1A5E"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="760" fill="url(#sky)"/>
+  <circle cx="820" cy="430" r="170" fill="url(#glow)"/>
+  <circle cx="820" cy="430" r="72" fill="#FFF3CF"/>
+  <path d="M0 520 L180 360 L300 450 L430 300 L600 470 L760 380 L900 480 L1040 350 L1200 470 L1200 560 L0 560 Z" fill="#6B3FA0"/>
+  <path d="M0 560 L140 470 L260 530 L400 440 L560 540 L700 480 L860 560 L1000 500 L1200 560 Z" fill="#45207A"/>
+  <rect y="560" width="1200" height="200" fill="url(#lake)"/>
+  <g fill="#FFF3CF">
+    <rect x="740" y="578" width="160" height="6" rx="3" opacity="0.7"/>
+    <rect x="770" y="604" width="100" height="5" rx="2.5" opacity="0.5"/>
+    <rect x="790" y="628" width="60" height="4" rx="2" opacity="0.35"/>
+  </g>
+</svg>

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Screenshot Tray
+Comment=Your latest screenshots, ready to drag into any app
+Exec=/usr/bin/gjs -m "@APP@"
+Icon=com.lucibe.ScreenshotTray
+Terminal=false
+Categories=Utility;
+Keywords=screenshot;screen;capture;drag;tray;
+StartupNotify=false

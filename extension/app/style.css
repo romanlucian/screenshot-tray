@@ -1,0 +1,44 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* Screenshot Tray: only the cards are visible; the window itself is see-through. */
+
+window.screenshot-tray {
+    background: none;
+}
+
+.tray-box {
+    padding: 14px;
+}
+
+.card {
+    border-radius: 12px;
+    background-color: alpha(black, 0.55);
+    box-shadow: 0 3px 10px alpha(black, 0.45), 0 0 0 1px alpha(white, 0.10);
+}
+
+.card.dragging {
+    opacity: 0.5;
+}
+
+/* The buttons appear only while the pointer is over a card. */
+.card .card-reveal {
+    opacity: 0;
+    transition: opacity 120ms ease-out;
+}
+
+.card:hover .card-reveal,
+.card.hover-demo .card-reveal {
+    opacity: 1;
+}
+
+.card-button {
+    min-width: 30px;
+    min-height: 30px;
+    padding: 0;
+}
+
+.clear-all {
+    min-height: 0;
+    padding: 4px 14px;
+    font-size: 0.9em;
+    font-weight: bold;
+}

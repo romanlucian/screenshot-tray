@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+  <!-- Demo "screenshot": a gallery web page. Made for the README; no real site. -->
+  <rect width="1200" height="760" fill="#FFFFFF"/>
+  <rect width="1200" height="84" fill="#FBFAFD"/>
+  <circle cx="72" cy="42" r="16" fill="#5E2B8C"/>
+  <text x="100" y="52" font-family="Ubuntu Sans" font-size="28" font-weight="700" fill="#2A1B3D">Gallery</text>
+  <g font-family="Ubuntu Sans" font-size="22" fill="#6E6480">
+    <text x="820" y="50">Prints</text>
+    <text x="920" y="50">Artists</text>
+    <text x="1030" y="50">About</text>
+  </g>
+  <text x="72" y="200" font-family="Ubuntu Sans" font-size="58" font-weight="700" fill="#2A1B3D">Spring collection</text>
+  <text x="72" y="250" font-family="Ubuntu Sans" font-size="26" fill="#7A6F8A">Twelve new prints, framed and ready to hang</text>
+  <rect x="72" y="290" width="210" height="58" rx="29" fill="#5E2B8C"/>
+  <text x="177" y="327" font-family="Ubuntu Sans" font-size="22" font-weight="700" fill="#FFFFFF" text-anchor="middle">Browse prints</text>
+  <!-- three framed artworks -->
+  <g>
+    <rect x="72" y="400" width="320" height="300" rx="10" fill="#EFE9F6"/>
+    <rect x="92" y="420" width="280" height="260" fill="#F7D9A8"/>
+    <circle cx="232" cy="520" r="62" fill="#F0735A"/>
+    <rect x="92" y="600" width="280" height="80" fill="#7443AD"/>
+  </g>
+  <g>
+    <rect x="440" y="400" width="320" height="300" rx="10" fill="#EFE9F6"/>
+    <rect x="460" y="420" width="280" height="260" fill="#CFE3F2"/>
+    <path d="M460 560 Q530 520 600 560 T740 560 V680 H460 Z" fill="#3E7CB1"/>
+    <path d="M460 610 Q530 570 600 610 T740 610 V680 H460 Z" fill="#2A5A8A"/>
+  </g>
+  <g>
+    <rect x="808" y="400" width="320" height="300" rx="10" fill="#EFE9F6"/>
+    <rect x="828" y="420" width="280" height="260" fill="#E3EFD9"/>
+    <rect x="962" y="560" width="14" height="100" fill="#6B4A2E"/>
+    <circle cx="969" cy="530" r="70" fill="#4E8C4A"/>
+    <circle cx="930" cy="560" r="44" fill="#5FA05A"/>
+    <circle cx="1010" cy="565" r="40" fill="#3F7A3C"/>
+  </g>
+</svg>

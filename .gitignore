@@ -1,0 +1,8 @@
+# Personal files that sit in this folder but never belong in the repository.
+# The phone photos carry the location they were taken at.
+*.jpg
+*.jpeg
+wlc-README.md
+
+__pycache__/
+*.pyc
