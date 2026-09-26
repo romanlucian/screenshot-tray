@@ -42,10 +42,12 @@ export default class ScreenshotTray extends Extension {
     // An icon in the top bar, so the tray can be reached even while it is hidden.
     _addTopBarMenu() {
         this._indicator = new PanelMenu.Button(0.0, 'Screenshot Tray', false);
-        this._indicator.add_child(new St.Icon({
+        const icon = new St.Icon({
             gicon: Gio.icon_new_for_string(GLib.build_filenamev([this.path, 'icons', 'screenshot-tray-symbolic.svg'])),
             style_class: 'system-status-icon',
-        }));
+        });
+        this._indicator.add_child(icon);
+        this._matchNeighbours(icon);
         const menu = this._indicator.menu;
         menu.addAction('Bring back the last closed', () => this._askTray('restore-last'));
         menu.addAction('Show the newest screenshots', () => this._askTray('show-recent'));
@@ -57,6 +59,25 @@ export default class ScreenshotTray extends Extension {
         menu.addAction('About Screenshot Tray', () => this._askTray('about'));
         menu.addAction('Quit Screenshot Tray', () => this._quit());
         Main.panel.addToStatusArea(this.uuid, this._indicator);
+    }
+
+    // Gives the icon the same spacing as Ubuntu's other top-bar icons (its AppIndicator
+    // add-on), so the hover highlight is a circle like theirs, not a wide oval. It
+    // follows that add-on's "compact" setting; without it, GNOME's own look stays.
+    _matchNeighbours(icon) {
+        const schema = Gio.SettingsSchemaSource.get_default()
+            ?.lookup('org.gnome.shell.extensions.appindicator', true);
+        if (!schema?.has_key('compact-mode-enabled'))
+            return;
+        this._appIndicatorSettings = new Gio.Settings({settings_schema: schema});
+        const apply = () => {
+            const compact = this._appIndicatorSettings.get_boolean('compact-mode-enabled');
+            this._indicator.set_style(compact ? '-natural-hpadding: 10px' : null);
+            icon.set_style(compact ? 'padding: 0; margin: 0' : 'padding: 0');
+        };
+        this._appIndicatorSettingsId =
+            this._appIndicatorSettings.connect('changed::compact-mode-enabled', apply);
+        apply();
     }
 
     // Switches the add-on off, so the tray and this icon go, also after the next
@@ -79,6 +100,10 @@ export default class ScreenshotTray extends Extension {
     }
 
     disable() {
+        if (this._appIndicatorSettingsId)
+            this._appIndicatorSettings.disconnect(this._appIndicatorSettingsId);
+        this._appIndicatorSettingsId = 0;
+        this._appIndicatorSettings = null;
         this._indicator?.destroy();
         this._indicator = null;
 
