@@ -391,6 +391,11 @@ export class Tray {
         return [...this._cards];
     }
 
+    // For tests: start with nothing for Bring back to bring.
+    forgetClosed() {
+        this._closed = [];
+    }
+
     // Changes in Settings reach the cards already showing.
     followSettings() {
         const settings = traySettings();

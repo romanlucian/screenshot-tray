@@ -400,7 +400,7 @@ function makeShots(count) {
     }
 }
 
-makeShots(6);
+makeShots(7);
 const tray = new Tray(app, {managed: false});
 tray.followSettings();
 
@@ -484,16 +484,16 @@ freshTray('with one card allowed, Bring back walks through all that left', async
     }
     assertEqual(seen.size >= 3, true);
 });
-freshTray('a full tray: Bring back walks back too, not between two cards', async () => {
-    tray.preload(6);
-    tray.dismiss(tray.cards[0]);
-    tray.preload(6);    // fills up again, pushing older ones out
-    const seen = [];
-    for (let press = 0; press < 4; press++) {
-        tray.restoreLast();
-        seen.push(shown().at(-1));
-    }
-    assertEqual(new Set(seen).size > 2 || seen[0] !== seen[2], true);
+freshTray('a full tray: Bring back reaches even the card that left first', async () => {
+    tray.forgetClosed();
+    tray.preload(7);        // five show; the two oldest have left
+    assertEqual(shown().length, 5);
+    const cardsBefore = shown();
+    tray.restoreLast();     // brings back the newer of the two, and pushes out another
+    tray.restoreLast();     // must now bring back the one that left first
+    const leftFirst = ['shot-1.png', 'shot-2.png', 'shot-3.png', 'shot-4.png', 'shot-5.png', 'shot-6.png', 'shot-7.png']
+        .filter(name => !cardsBefore.includes(name));
+    assertEqual(leftFirst.every(name => shown().includes(name)), true);
 });
 
 const MINUTE = 60e6;
