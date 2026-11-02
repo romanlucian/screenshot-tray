@@ -1,0 +1,7 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Stands in for ssh in tests/ssh-test.js: records what it was given and answers as told.
+printf '%s\n' "$@" > "$FAKE_SSH_LOG"
+cat > "$FAKE_SSH_LOG.stdin"
+printf '%s' "$FAKE_SSH_OUTPUT"
+exit "${FAKE_SSH_EXIT:-0}"

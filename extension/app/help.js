@@ -5,7 +5,8 @@ import Adw from 'gi://Adw?version=1';
 import Gdk from 'gi://Gdk?version=4.0';
 import Gtk from 'gi://Gtk?version=4.0';
 
-import {checkServer, openSshConfig, sshHosts} from './servers.js';
+import {sshHosts} from './servers.js';
+import {checkTarget, openSshConfig} from './ssh.js';
 
 // Must not be the tray's own window title: the add-on pins only the window with that title.
 const HELP_TITLE = 'How to use Screenshot Tray';
@@ -58,7 +59,7 @@ export function showHelp() {
         test.connect('clicked', () => {
             test.sensitive = false;
             serverRow.subtitle = 'Testing…';
-            checkServer(host)
+            checkTarget({kind: 'ssh', name: host})
                 .then(() => (serverRow.subtitle = '✓ Ready: sending to this server works.'))
                 .catch(e => (serverRow.subtitle = e.message))
                 .finally(() => (test.sensitive = true));

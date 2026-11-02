@@ -10,7 +10,7 @@ trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/home" "$WORK/config"
 
 status=0
-for name in servers-test.js; do
+for name in servers-test.js ssh-test.js; do
     echo "== $name"
     HOME="$WORK/home" XDG_CONFIG_HOME="$WORK/config" \
         timeout 2m gjs -m "$HERE/tests/$name" || status=1

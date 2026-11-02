@@ -22,7 +22,8 @@ import Gettext from 'gettext';
 import System from 'system';
 
 import {showAbout, showHelp} from './help.js';
-import {sshHosts, uploadToServer} from './servers.js';
+import {sshHosts} from './servers.js';
+import {sendTo} from './ssh.js';
 
 const APP_ID = 'com.zincoo.ScreenshotTray';
 const ADDON_UUID = 'screenshot-tray@zincoo.com';
@@ -260,7 +261,7 @@ class Card {
         this._sendButton.sensitive = false;
         this._say(`Sending to ${host}…`, 30000);
         try {
-            const remotePath = await uploadToServer(this.path, host);
+            const remotePath = await sendTo({kind: 'ssh', name: host}, this.path);
             Gdk.Display.get_default().get_clipboard().set_text(remotePath);
             log(`sent ${GLib.path_get_basename(this.path)} to ${host}: ${remotePath}`);
             this._say(`On ${host}. Its path is copied: paste it there (Ctrl+Shift+V).`, 4000);
