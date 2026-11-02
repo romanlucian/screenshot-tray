@@ -43,6 +43,10 @@ window.screenshot-tray {
     font-weight: bold;
 }
 
+.tray-gear {
+    padding: 4px 8px;
+}
+
 .card-status {
     padding: 4px 8px;
     border-radius: 8px;

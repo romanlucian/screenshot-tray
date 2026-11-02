@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- The tray's settings, read by both the app and the add-on. After changing this file, run
+     glib-compile-schemas extension/schemas and commit the result: tests/run.sh checks it. -->
+<schemalist>
+  <schema id="org.gnome.shell.extensions.screenshot-tray" path="/org/gnome/shell/extensions/screenshot-tray/">
+    <key name="max-cards" type="i">
+      <range min="1" max="5"/>
+      <default>5</default>
+      <summary>How many cards float at once</summary>
+    </key>
+    <key name="corner" type="s">
+      <choices>
+        <choice value="bottom-left"/>
+        <choice value="bottom-right"/>
+      </choices>
+      <default>'bottom-left'</default>
+      <summary>The screen corner the tray sits in</summary>
+    </key>
+    <key name="keep-after-drag" type="b">
+      <default>false</default>
+      <summary>Keep a card in the tray after an app accepts it</summary>
+    </key>
+    <key name="hide-after-minutes" type="i">
+      <range min="0" max="1440"/>
+      <default>0</default>
+      <summary>Minutes before a card leaves by itself; 0 means never</summary>
+    </key>
+    <key name="shortcut-restore-last" type="as">
+      <default>[]</default>
+      <summary>Shortcut: bring back the last closed</summary>
+    </key>
+    <key name="shortcut-show-recent" type="as">
+      <default>[]</default>
+      <summary>Shortcut: show the newest screenshots</summary>
+    </key>
+    <key name="shortcut-clear" type="as">
+      <default>[]</default>
+      <summary>Shortcut: clear the tray</summary>
+    </key>
+    <key name="shortcut-settings" type="as">
+      <default>[]</default>
+      <summary>Shortcut: open Settings</summary>
+    </key>
+  </schema>
+</schemalist>

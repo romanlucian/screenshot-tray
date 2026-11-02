@@ -10,6 +10,14 @@ trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/home" "$WORK/config"
 
 status=0
+echo "== compiled settings"
+glib-compile-schemas --targetdir="$WORK" "$HERE/extension/schemas"
+if cmp -s "$WORK/gschemas.compiled" "$HERE/extension/schemas/gschemas.compiled"; then
+    echo "ok    extension/schemas/gschemas.compiled matches its source"
+else
+    echo "FAIL  run: glib-compile-schemas extension/schemas"
+    status=1
+fi
 for name in servers-test.js ssh-test.js; do
     echo "== $name"
     HOME="$WORK/home" XDG_CONFIG_HOME="$WORK/config" \

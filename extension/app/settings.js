@@ -1,18 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The Settings window: the servers a screenshot can be sent to. It goes online only
-// when a button here is pressed, so a row says "Ready" only after its Test has passed.
+// The Settings window: General, Servers and Shortcuts tabs. It goes online only when a
+// button on the Servers tab is pressed, so a row says "Ready" only after its Test has passed.
 
 import Adw from 'gi://Adw?version=1';
 import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk?version=4.0';
 
 import {inGreen, realDeps, showAddServer} from './add-server.js';
+import {generalPage} from './general-page.js';
+import {addOnIsUpToDate} from './preferences.js';
 import {loadList, onServersChanged, removeServer, setSshHostOn, sshHosts} from './servers.js';
+import {shortcutsPage} from './shortcuts-page.js';
 
 // Must not be the tray's own window title: the add-on pins only the window with that title.
 const TITLE = 'Settings';
 const OFF = 'Not offered on your cards';
 const ICON = 'network-server-symbolic';
+const LOGIN_NOTE = 'Log out and back in once to switch on the screen corner and the tray shortcuts.';
+const settingsDeps = {...realDeps, addOnIsUpToDate};
 
 const escaped = text => GLib.markup_escape_text(text, -1);
 
@@ -111,13 +116,8 @@ function sshGroup(deps, hosts, sshOn) {
     return group;
 }
 
-export function showSettings(deps = realDeps) {
-    if (openDialog) {
-        openDialog.get_root()?.present?.();
-        return openDialog;
-    }
-    const dialog = new Adw.PreferencesDialog({title: TITLE, search_enabled: false});
-    const page = new Adw.PreferencesPage();
+function serversPage(dialog, deps) {
+    const page = new Adw.PreferencesPage({name: 'servers', title: 'Servers', icon_name: ICON});
     const group = new Adw.PreferencesGroup({
         title: 'Send to a server',
         description: 'Send a screenshot to a computer you own, then paste its path into Claude Code or Codex running there.',
@@ -150,11 +150,38 @@ export function showSettings(deps = realDeps) {
         page.add(sshGroup(deps, hosts, loadList().sshOn));
 
     const stopWatching = onServersChanged(showServers);
+    dialog.connect('closed', () => stopWatching());
+    return page;
+}
+
+// pageName: 'general', 'servers' or 'shortcuts'; left out, it opens where it last was.
+export function showSettings(deps = settingsDeps, pageName = null) {
+    if (openDialog) {
+        if (pageName)
+            openDialog.visible_page_name = pageName;
+        openDialog.get_root()?.present?.();
+        return openDialog;
+    }
+    const dialog = new Adw.PreferencesDialog({title: TITLE, search_enabled: false});
     dialog.connect('closed', () => {
-        stopWatching();
         openDialog = null;
     });
-    dialog.add(page);
+
+    const general = generalPage();
+    const shortcuts = shortcutsPage(dialog);
+    [general, serversPage(dialog, deps), shortcuts].forEach(page => dialog.add(page));
+
+    // Only tabs with a setting the add-on carries out need the note.
+    const notes = [general, shortcuts].map(page => {
+        page.banner = new Adw.Banner({title: LOGIN_NOTE, revealed: false});
+        return page.banner;
+    });
+    deps.addOnIsUpToDate().then(upToDate => notes.forEach(note => {
+        note.revealed = !upToDate;
+    }));
+
+    if (pageName)
+        dialog.visible_page_name = pageName;
     dialog.present(null);
     openDialog = dialog;
     return dialog;

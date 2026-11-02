@@ -2,13 +2,15 @@
 // Screenshot Tray: the GNOME Shell side.
 //
 // Starts the tray app (app/main.js) the same way Ubuntu's desktop-icons add-on
-// starts its window, so GNOME trusts it. Then keeps that window in the
-// bottom-left corner (where CleanShot puts its thumbnails), above other windows,
-// on every workspace, out of Alt+Tab, and never taking the keyboard when it appears.
+// starts its window, so GNOME trusts it. Then keeps that window in the bottom corner
+// chosen in Settings, above other windows, on every workspace, out of Alt+Tab, and
+// never taking the keyboard when it appears. It also listens for the tray's shortcuts,
+// since only the desktop itself can see keys pressed while another app is in front.
 
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import Meta from 'gi://Meta';
+import Shell from 'gi://Shell';
 import St from 'gi://St';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
@@ -22,6 +24,8 @@ const TRAY_TITLE = 'Screenshot Tray';   // the tray window's title in app/main.j
 const MARGIN = 16;              // logical pixels from the screen edges
 const QUICK_EXIT_MS = 10000;    // a tray that stops sooner than this counts as a crash
 const MAX_CRASHES = 5;          // after that, leave it off until the next login
+// Each is a setting named shortcut-<action>, and an action in app/main.js.
+const SHORTCUT_ACTIONS = ['restore-last', 'show-recent', 'clear', 'settings'];
 
 export default class ScreenshotTray extends Extension {
     enable() {
@@ -31,12 +35,23 @@ export default class ScreenshotTray extends Extension {
         this._client = null;
         this._cancellable = null;
 
+        this._settings = this.getSettings();
         this._displayIds = [
             global.display.connect('window-created', (_display, window) => this._adopt(window)),
             global.display.connect('workareas-changed', () => this._placeAll()),
         ];
+        this._settings.get_string('corner');    // settings only report keys that were read
+        this._cornerId = this._settings.connect('changed::corner', () => this._placeAll());
         this._addTopBarMenu();
+        this._addShortcuts();
         this._start();
+    }
+
+    _addShortcuts() {
+        for (const action of SHORTCUT_ACTIONS) {
+            Main.wm.addKeybinding(`shortcut-${action}`, this._settings, Meta.KeyBindingFlags.IGNORE_AUTOREPEAT,
+                Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW, () => this._askTray(action));
+        }
     }
 
     // An icon in the top bar, so the tray can be reached even while it is hidden.
@@ -101,6 +116,11 @@ export default class ScreenshotTray extends Extension {
     }
 
     disable() {
+        SHORTCUT_ACTIONS.forEach(action => Main.wm.removeKeybinding(`shortcut-${action}`));
+        this._settings.disconnect(this._cornerId);
+        this._cornerId = 0;
+        this._settings = null;
+
         if (this._appIndicatorSettingsId)
             this._appIndicatorSettings.disconnect(this._appIndicatorSettingsId);
         this._appIndicatorSettingsId = 0;
@@ -214,7 +234,9 @@ export default class ScreenshotTray extends Extension {
             window.unmake_above();
             return;
         }
-        const x = area.x + MARGIN;
+        const x = this._settings.get_string('corner') === 'bottom-right'
+            ? area.x + area.width - frame.width - MARGIN
+            : area.x + MARGIN;
         const y = area.y + area.height - frame.height - MARGIN;
         if (frame.x !== x || frame.y !== y)
             window.move_frame(true, x, y);

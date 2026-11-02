@@ -19,7 +19,9 @@ import {Tray} from './tray.js';
 
 const APP_ID = 'com.zincoo.ScreenshotTray';
 const ADDON_UUID = 'screenshot-tray@zincoo.com';
+const APP_PATH = '/com/zincoo/ScreenshotTray';
 const MANAGED = System.programArgs.includes('--managed');
+const OPEN_SETTINGS = System.programArgs.includes('--settings');
 const APP_DIR = GLib.path_get_dirname(Gio.File.new_for_uri(import.meta.url).get_path());
 
 function log(message) {
@@ -44,6 +46,36 @@ function switchAddOnOn() {
     } catch {
         return false;   // no GNOME Shell to ask, e.g. in the README-image sandbox
     }
+}
+
+// Waits for the tray to be on the session bus. Returns false if it doesn't come in time.
+function trayAppears(waitMs) {
+    const loop = new GLib.MainLoop(null, false);
+    let appeared = false;
+    const watch = Gio.bus_watch_name(Gio.BusType.SESSION, APP_ID, Gio.BusNameWatcherFlags.NONE, () => {
+        appeared = true;
+        loop.quit();
+    }, null);
+    const timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, waitMs, () => {
+        loop.quit();
+        return GLib.SOURCE_REMOVE;
+    });
+    loop.run();
+    Gio.bus_unwatch_name(watch);
+    if (!appeared)
+        GLib.source_remove(timer);
+    return appeared;
+}
+
+// "Settings" on the app icon's right-click menu: reaches the tray that is running, after
+// switching the add-on back on if needed. Returns false when there is no tray to reach.
+function askTrayForSettings() {
+    const wasOff = switchAddOnOn();
+    if (!trayAppears(wasOff ? 10000 : 500))
+        return false;
+    Gio.DBusActionGroup.get(Gio.DBus.session, APP_ID, APP_PATH).activate_action('settings', null);
+    Gio.DBus.session.flush_sync(null);
+    return true;
 }
 
 function loadStyle() {
@@ -71,6 +103,7 @@ app.connect('startup', () => {
     tray.restore();
     tray.watch();
     tray.followServers();
+    tray.followSettings();
     if (preloadCount > 0)
         tray.preload(preloadCount);
     if (renderPath)
@@ -96,9 +129,11 @@ app.connect('activate', () => {
     // The first activation is this tray starting up; later ones are repeat launches.
     if (activations++ > 0)
         tray.bringBack();
+    else if (OPEN_SETTINGS)
+        showSettings();
 });
 
-if (!MANAGED && !renderPath && preloadCount === 0 && switchAddOnOn())
-    log('the add-on was switched off; switched it back on, and it starts the tray');
+if (OPEN_SETTINGS ? askTrayForSettings() : !MANAGED && !renderPath && preloadCount === 0 && switchAddOnOn())
+    log(OPEN_SETTINGS ? 'asked the tray to open Settings' : 'the add-on was switched off; switched it back on, and it starts the tray');
 else
     await app.runAsync([System.programInvocationName]);

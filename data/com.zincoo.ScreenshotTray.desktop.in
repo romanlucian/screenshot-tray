@@ -8,3 +8,8 @@ Terminal=false
 Categories=Utility;
 Keywords=screenshot;screen;capture;drag;tray;
 StartupNotify=false
+Actions=settings;
+
+[Desktop Action settings]
+Name=Settings
+Exec=/usr/bin/gjs -m "@APP@" --settings

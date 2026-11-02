@@ -34,7 +34,8 @@ PY
 mkdir -p "$WORK/home/.ssh"
 printf 'Host my-server\n    HostName 203.0.113.30\n\nHost build-box\n    HostName 203.0.113.40\n' \
     > "$WORK/home/.ssh/config"
-MADE_UP=(HOME="$WORK/home" XDG_CONFIG_HOME="$WORK/home/.config" XDG_DATA_HOME="$HOME/.local/share")
+MADE_UP=(HOME="$WORK/home" XDG_CONFIG_HOME="$WORK/home/.config" XDG_DATA_HOME="$HOME/.local/share"
+    GSETTINGS_BACKEND=memory)
 ONLY_RESULTS='^(drew|could not)|rendered'
 
 offscreen env "${MADE_UP[@]}" timeout 2m gjs -m "$HERE/tools/render_windows.js" "$OUT" 2>&1 \

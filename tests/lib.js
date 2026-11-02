@@ -49,6 +49,14 @@ export function requireMadeUpHome() {
     }
 }
 
+// These tests change settings, also GNOME's own shortcuts: refuse to run on the real ones.
+export function requireMemorySettings() {
+    if (GLib.getenv('GSETTINGS_BACKEND') !== 'memory') {
+        print('Refusing to run: use the scripts in tests/, which keep settings in memory.');
+        System.exit(2);
+    }
+}
+
 // Runs the tests in order, prints each result, and exits non-zero if any failed.
 export async function finish() {
     const loop = new GLib.MainLoop(null, false);

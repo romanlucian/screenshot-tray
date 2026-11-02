@@ -1,7 +1,8 @@
 {
   "uuid": "screenshot-tray@zincoo.com",
   "name": "Screenshot Tray",
-  "description": "Keeps your latest screenshots floating in the bottom-left corner, ready to drag into any app.",
+  "description": "Keeps your latest screenshots floating in the corner of the screen, ready to drag into any app.",
   "shell-version": ["50"],
-  "version": 1
+  "version": 2,
+  "settings-schema": "org.gnome.shell.extensions.screenshot-tray"
 }

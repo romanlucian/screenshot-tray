@@ -15,11 +15,14 @@ import Gtk from 'gi://Gtk?version=4.0';
 import Pango from 'gi://Pango';
 import Gettext from 'gettext';
 
+import {traySettings} from './preferences.js';
 import {SendButton} from './send-button.js';
 import {onServersChanged, sendTargets} from './servers.js';
+import {showSettings} from './settings.js';
 import {sendTo} from './ssh.js';
 
-const MAX_CARDS = 5;
+const HIDE_CHECK_SECONDS = 30;  // how often old cards are looked for
+const MINUTE = 60e6;            // in the microseconds of GLib.get_monotonic_time()
 const MAX_CLOSED = 20;          // how many cards that left "Bring back" remembers
 const CARD_MAX_WIDTH = 220;     // logical pixels
 const CARD_MAX_HEIGHT = 140;
@@ -83,6 +86,9 @@ class Card {
         this._destroyed = false;
         this._hotspot = [0, 0];
         this._dragRefused = false;
+        this._dragging = false;
+        this.sending = false;
+        this.shownAt = GLib.get_monotonic_time();
 
         const {texture, width, height} = loadThumbnail(path);
         const picture = new Gtk.Picture({
@@ -105,9 +111,8 @@ class Card {
             return this._dragContent();
         });
         drag.connect('drag-begin', source => {
-            this._dragRefused = false;
             source.set_icon(new Gtk.WidgetPaintable({widget: picture}), ...this._hotspot);
-            this.widget.add_css_class('dragging');
+            this.dragBegan();
         });
         drag.connect('drag-cancel', (_source, _drag, reason) => {
             this._dragRefused = true;
@@ -115,17 +120,9 @@ class Card {
             return false;
         });
         drag.connect('drag-end', (_source, gdkDrag) => {
-            this.widget.remove_css_class('dragging');
             const action = gdkDrag.get_selected_action();
             log(`drag of ${GLib.path_get_basename(this.path)} ended, action: ${enumName(Gdk.DragAction, action)}`);
-            // Delivered: the card has done its job, so it leaves the tray (the file stays).
-            // A refused drag can still report an action, so the cancel signal decides.
-            if (!this._dragRefused && action !== 0) {
-                GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
-                    this._tray.dismiss(this);
-                    return GLib.SOURCE_REMOVE;
-                });
-            }
+            this.dragEnded(action);
         });
         picture.add_controller(drag);
 
@@ -195,6 +192,34 @@ class Card {
         this.widget.add_overlay(actions);
         this.widget.add_overlay(this._status);
         this.widget.add_overlay(dismiss);
+
+        this._pointer = new Gtk.EventControllerMotion();
+        this.widget.add_controller(this._pointer);
+    }
+
+    dragBegan() {
+        this._dragRefused = false;
+        this._dragging = true;
+        this.widget.add_css_class('dragging');
+    }
+
+    dragEnded(action) {
+        this._dragging = false;
+        this.widget.remove_css_class('dragging');
+        // Delivered: the card has done its job, so it leaves the tray (the file stays),
+        // unless Settings keeps it. A refused drag can still report an action, so the
+        // cancel signal decides.
+        if (this._dragRefused || action === 0 || traySettings().get_boolean('keep-after-drag'))
+            return;
+        GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+            this._tray.dismiss(this);
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    // Someone is pointing at it, dragging it or sending it: it mustn't leave by itself now.
+    get inUse() {
+        return this._dragging || this.sending || this._pointer.contains_pointer;
     }
 
     destroy() {
@@ -229,6 +254,7 @@ class Card {
     // Uploads the screenshot to the server and copies its path there, ready to paste
     // into Claude Code or Codex running on that server. The card stays in the tray.
     async _send(target) {
+        this.sending = true;
         this._sendButton.setBusy(true);
         this._say(`Sending to ${target.name}…`, 30000);
         try {
@@ -240,6 +266,7 @@ class Card {
             log(`could not send ${GLib.path_get_basename(this.path)} to ${target.name}: ${e.message}`);
             this._say(e.message, 8000);
         } finally {
+            this.sending = false;
             if (!this._destroyed)
                 this._sendButton.setBusy(false);
         }
@@ -324,9 +351,17 @@ export class Tray {
         });
         this._clearAll.connect('clicked', () => this.clear());
 
-        this._header = new Gtk.Box({spacing: 8, halign: Gtk.Align.START, visible: false});
+        this.gear = new Gtk.Button({
+            icon_name: 'emblem-system-symbolic',
+            tooltip_text: 'Settings',
+            css_classes: ['osd', 'pill', 'tray-pill', 'tray-gear'],
+        });
+        this.gear.connect('clicked', () => showSettings());
+
+        this._header = new Gtk.Box({spacing: 8, halign: Gtk.Align.START});
         this._header.append(this._bringBack);
         this._header.append(this._clearAll);
+        this._header.append(this.gear);
 
         this._placeholder = new Gtk.Label({
             label: 'Your next screenshots will appear here',
@@ -348,7 +383,50 @@ export class Tray {
         this._window.set_child(this._box);
     }
 
+    get cards() {
+        return [...this._cards];
+    }
+
     // Changes in Settings reach the cards already showing.
+    followSettings() {
+        const settings = traySettings();
+        this._alignment = this._alignmentFor(settings);
+        settings.connect('changed::corner', () => {
+            this._alignment = this._alignmentFor(settings);
+            this._header.halign = this._alignment;
+            this._cards.forEach(card => (card.widget.halign = this._alignment));
+        });
+        this._header.halign = this._alignment;
+        this._cards.forEach(card => (card.widget.halign = this._alignment));
+
+        settings.connect('changed::max-cards', () => {
+            this._trim();
+            this._update();
+        });
+        this._trim();
+
+        GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, HIDE_CHECK_SECONDS, () => {
+            this.hideOldCards();
+            return GLib.SOURCE_CONTINUE;
+        });
+    }
+
+    _alignmentFor(settings) {
+        return settings.get_string('corner') === 'bottom-right' ? Gtk.Align.END : Gtk.Align.START;
+    }
+
+    // Cards older than Settings allows leave by themselves, for Bring back.
+    hideOldCards(now = GLib.get_monotonic_time()) {
+        const minutes = traySettings().get_int('hide-after-minutes');
+        if (minutes === 0)
+            return;
+        const old = this._cards.filter(card => !card.inUse && now - card.shownAt >= minutes * MINUTE);
+        if (old.length === 0)
+            return;
+        old.forEach(card => this._remove(card));
+        this._update();
+    }
+
     followServers() {
         onServersChanged(() => {
             const targets = sendTargets();
@@ -528,7 +606,13 @@ export class Tray {
             this._box.append(card.widget);
         else
             this._box.insert_child_after(card.widget, this._placeholder);
-        while (this._cards.length > MAX_CARDS)
+        card.widget.halign = this._alignment ?? Gtk.Align.START;
+        this._trim();
+    }
+
+    _trim() {
+        const limit = traySettings().get_int('max-cards');
+        while (this._cards.length > limit)
             this._remove(this._cards[0]);
     }
 
@@ -565,7 +649,6 @@ export class Tray {
     _update() {
         this._bringBack.visible = this._closed.length > 0;
         this._clearAll.visible = this._cards.length >= 2;
-        this._header.visible = this._bringBack.visible || this._clearAll.visible;
         this._placeholder.visible = !this._managed && this._cards.length === 0;
         // Pinned: shown without asking for the keyboard, hidden when empty.
         // Ordinary window: always shown, so it stays where it was put.

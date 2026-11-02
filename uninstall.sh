@@ -20,6 +20,10 @@ for key in enabled-extensions disabled-extensions; do
     gsettings set org.gnome.shell "$key" "$updated"
 done
 
+# The tray's own settings. GNOME's screenshot shortcuts stay as you set them.
+gsettings --schemadir "$HERE/extension/schemas" reset-recursively \
+    org.gnome.shell.extensions.screenshot-tray 2>/dev/null || true
+
 if [ -L "$LINK" ]; then
     rm "$LINK"
 fi

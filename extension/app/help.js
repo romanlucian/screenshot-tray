@@ -11,13 +11,15 @@ const HELP_TITLE = 'How to use Screenshot Tray';
 
 const EVERYDAY = [
     ['camera-photo-symbolic', 'Take a screenshot',
-        'Use your usual screenshot shortcut (Print, unless you changed it). The screenshot appears in the tray, in the bottom-left corner.'],
+        'Use your usual screenshot shortcut (Print, unless you changed it). The screenshot appears in the tray, in the corner of the screen.'],
     ['input-mouse-symbolic', 'Drag a card into any app',
         'A terminal gets the file\'s path, which Claude Code and Codex understand. A browser, chat or email gets the file. Once an app takes it, the card leaves the tray.'],
     ['edit-copy-symbolic', 'Hover a card for more',
         'Copy the picture, open it, send it to a server, or close the card with ✕. The file always stays in Pictures › Screenshots.'],
     ['edit-undo-symbolic', 'Bring back',
         'Closed a card by mistake? Press Bring back at the top of the tray, or choose it in the top-bar menu.'],
+    ['emblem-system-symbolic', 'Settings',
+        'Press the gear above your cards, or choose Settings in the top-bar menu. It also sits in the menu you get when you right-click the app\'s icon.'],
     ['application-exit-symbolic', 'Quit and start again',
         'Top-bar icon › Quit Screenshot Tray switches it off. Click Screenshot Tray in the app list to switch it back on.'],
 ];
@@ -40,7 +42,7 @@ export function showHelp() {
         'network-server-symbolic');
     servers.activatable = true;
     servers.add_suffix(new Gtk.Image({icon_name: 'go-next-symbolic'}));
-    servers.connect('activated', () => showSettings());
+    servers.connect('activated', () => showSettings(undefined, 'servers'));
     everyday.add(servers);
     page.add(everyday);
 
@@ -54,7 +56,7 @@ export function showAbout() {
         application_name: 'Screenshot Tray',
         application_icon: 'com.zincoo.ScreenshotTray',
         developer_name: 'Zincoo · Lucian Roman',
-        version: '1.1',
+        version: '1.2',
         website: 'https://zincoo.com',
         comments: 'Your latest screenshots float in the corner of the screen, ready to drag into any app.',
         copyright: '© 2026 Lucian Roman, Zincoo',

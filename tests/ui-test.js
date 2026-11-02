@@ -7,7 +7,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk?version=4.0';
 
-import {assertEqual, finish, requireMadeUpHome, test} from './lib.js';
+import {assertEqual, finish, requireMadeUpHome, requireMemorySettings, test} from './lib.js';
 import {button, row, rows, walk} from './widgets.js';
 import {
     addServer, configDir, loadList, onServersChanged, parseServerInput, setSshHostOn,
@@ -16,9 +16,10 @@ import {SetupCancelled, SetupError} from '../extension/app/ssh.js';
 import {showAddServer} from '../extension/app/add-server.js';
 import {showHelp} from '../extension/app/help.js';
 import {SendButton} from '../extension/app/send-button.js';
-import {showSettings} from '../extension/app/settings.js';
+import {showSettings as openSettings} from '../extension/app/settings.js';
 
 requireMadeUpHome();
+requireMemorySettings();
 // Windows behave differently without an application, so test inside one as the tray runs.
 const app = new Adw.Application({application_id: 'com.zincoo.ScreenshotTrayTests', flags: Gio.ApplicationFlags.NON_UNIQUE});
 app.register(null);
@@ -63,7 +64,16 @@ function fakeDeps(overrides = {}) {
         checkTarget: counted('checkTarget', overrides.checkTarget ?? (async () => {})),
         removeServerKey: counted('removeServerKey', overrides.removeServerKey ?? (async () => true)),
         forgetServerId: counted('forgetServerId', overrides.forgetServerId ?? (async () => {})),
+        addOnIsUpToDate: async () => true,
     };
+}
+
+function showSettings(deps) {
+    return openSettings(deps, 'servers');
+}
+
+function serverRows(dialog) {
+    return rows([...walk(dialog)].find(widget => widget instanceof Adw.PreferencesPage && widget.name === 'servers'));
 }
 
 function fill(dialog, {address = '', user = '', password = ''}) {
@@ -94,7 +104,7 @@ fresh('Settings lists added servers and SSH entries', async () => {
     addServer(pi);
     sshConfig('Host my-server\nHost build-box\n');
     const dialog = showSettings(fakeDeps());
-    assertEqual(rows(dialog).map(item => item.title),
+    assertEqual(serverRows(dialog).map(item => item.title),
         ['Studio Pi', 'Add a server…', 'my-server', 'build-box']);
     assertEqual(row(dialog, 'Studio Pi').subtitle, 'lucian@203.0.113.10');
     await closed(dialog);
@@ -108,12 +118,12 @@ fresh('a non-standard port shows in the address', async () => {
 fresh('a name with odd characters shows as typed', async () => {
     addServer(parseServerInput({address: 'h', user: 'a', name: 'R&D <box>'}));
     const dialog = showSettings(fakeDeps());
-    assertEqual(rows(dialog)[0].title, 'R&amp;D &lt;box&gt;');
+    assertEqual(serverRows(dialog)[0].title, 'R&amp;D &lt;box&gt;');
     await closed(dialog);
 });
 fresh('the SSH group hides when there are no entries', async () => {
     const dialog = showSettings(fakeDeps());
-    assertEqual(rows(dialog).map(item => item.title), ['Add a server…']);
+    assertEqual(serverRows(dialog).map(item => item.title), ['Add a server…']);
     assertEqual(textOn(dialog).includes('Already in your SSH settings'), false);
     await closed(dialog);
 });
