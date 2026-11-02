@@ -55,6 +55,7 @@ export default class ScreenshotTray extends Extension {
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         menu.addAction('Open the Screenshots folder', () => this._askTray('open-folder'));
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        menu.addAction('Settings…', () => this._askTray('settings'));
         menu.addAction('How to use…', () => this._askTray('help'));
         menu.addAction('About Screenshot Tray', () => this._askTray('about'));
         menu.addAction('Quit Screenshot Tray', () => this._quit());
@@ -167,7 +168,7 @@ export default class ScreenshotTray extends Extension {
         });
     }
 
-    // Pins the tray's own window. Its other windows (How to use, About) stay ordinary.
+    // Pins the tray's own window. Its other windows (Settings, How to use, About) stay ordinary.
     // The title can arrive just after the window, so it's checked again when it changes.
     _adopt(window) {
         if (!this._client?.owns_window(window))

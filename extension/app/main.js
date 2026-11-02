@@ -22,7 +22,9 @@ import Gettext from 'gettext';
 import System from 'system';
 
 import {showAbout, showHelp} from './help.js';
-import {sshHosts} from './servers.js';
+import {SendButton} from './send-button.js';
+import {onServersChanged, sendTargets} from './servers.js';
+import {showSettings} from './settings.js';
 import {sendTo} from './ssh.js';
 
 const APP_ID = 'com.zincoo.ScreenshotTray';
@@ -174,32 +176,9 @@ class Card {
         actions.append(this._copyButton);
         actions.append(open);
 
-        // Send to a server: one click with one server, a short list with several.
-        const hosts = tray.hosts;
-        if (hosts.length > 0) {
-            this._sendButton = new Gtk.Button({
-                icon_name: 'network-server-symbolic',
-                tooltip_text: hosts.length === 1 ? `Send to ${hosts[0]}` : 'Send to a server',
-                css_classes: ['osd', 'circular', 'card-button'],
-            });
-            if (hosts.length === 1) {
-                this._sendButton.connect('clicked', () => this._send(hosts[0]));
-            } else {
-                const list = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL});
-                this._hostsPopover = new Gtk.Popover({child: list});
-                this._hostsPopover.set_parent(this._sendButton);
-                for (const host of hosts) {
-                    const item = new Gtk.Button({label: host, css_classes: ['flat']});
-                    item.connect('clicked', () => {
-                        this._hostsPopover.popdown();
-                        this._send(host);
-                    });
-                    list.append(item);
-                }
-                this._sendButton.connect('clicked', () => this._hostsPopover.popup());
-            }
-            actions.append(this._sendButton);
-        }
+        this._sendButton = new SendButton({onSend: target => this._send(target)});
+        this._sendButton.update(sendTargets());
+        actions.append(this._sendButton.widget);
 
         // A short message across the top of the card, e.g. "Sending…" or "Path copied".
         this._status = new Gtk.Label({
@@ -237,8 +216,12 @@ class Card {
                 GLib.source_remove(id);
         }
         this._copiedId = this._statusId = 0;
-        this._hostsPopover?.unparent();
-        this._hostsPopover = null;
+        this._sendButton.destroy();
+    }
+
+    // The list of servers changed in Settings.
+    updateServers(targets) {
+        this._sendButton.update(targets);
     }
 
     _say(message, forMs) {
@@ -257,20 +240,20 @@ class Card {
 
     // Uploads the screenshot to the server and copies its path there, ready to paste
     // into Claude Code or Codex running on that server. The card stays in the tray.
-    async _send(host) {
-        this._sendButton.sensitive = false;
-        this._say(`Sending to ${host}…`, 30000);
+    async _send(target) {
+        this._sendButton.setBusy(true);
+        this._say(`Sending to ${target.name}…`, 30000);
         try {
-            const remotePath = await sendTo({kind: 'ssh', name: host}, this.path);
+            const remotePath = await sendTo(target, this.path);
             Gdk.Display.get_default().get_clipboard().set_text(remotePath);
-            log(`sent ${GLib.path_get_basename(this.path)} to ${host}: ${remotePath}`);
-            this._say(`On ${host}. Its path is copied: paste it there (Ctrl+Shift+V).`, 4000);
+            log(`sent ${GLib.path_get_basename(this.path)} to ${target.name}: ${remotePath}`);
+            this._say(`On ${target.name}. Its path is copied: paste it there (Ctrl+Shift+V).`, 4000);
         } catch (e) {
-            log(`could not send ${GLib.path_get_basename(this.path)} to ${host}: ${e.message}`);
+            log(`could not send ${GLib.path_get_basename(this.path)} to ${target.name}: ${e.message}`);
             this._say(e.message, 8000);
         } finally {
             if (!this._destroyed)
-                this._sendButton.sensitive = true;
+                this._sendButton.setBusy(false);
         }
     }
 
@@ -374,10 +357,12 @@ class Tray {
         this._window.set_child(this._box);
     }
 
-    // Read fresh for each new card, so a server added to ~/.ssh/config shows up
-    // without restarting the tray.
-    get hosts() {
-        return sshHosts();
+    // Changes in Settings reach the cards already showing.
+    followServers() {
+        onServersChanged(() => {
+            const targets = sendTargets();
+            this._cards.forEach(card => card.updateServers(targets));
+        });
     }
 
     watch() {
@@ -652,6 +637,7 @@ app.connect('startup', () => {
     tray = new Tray(app);
     tray.restore();
     tray.watch();
+    tray.followServers();
     if (preloadCount > 0)
         tray.preload(preloadCount);
     if (renderPath)
@@ -663,6 +649,7 @@ app.connect('startup', () => {
         ['show-recent', () => tray.preload(3)],
         ['clear', () => tray.clear()],
         ['open-folder', () => tray.openFolder()],
+        ['settings', () => showSettings()],
         ['help', () => showHelp()],
         ['about', () => showAbout()],
     ]) {

@@ -29,6 +29,8 @@ if [ -L "$ICON" ]; then
 fi
 rm -f "$HOME/.local/share/applications/com.zincoo.ScreenshotTray.desktop"
 rm -rf "$HOME/.cache/screenshot-tray"
+# The server list, the app's own key and the server IDs it trusted.
+rm -rf "${XDG_CONFIG_HOME:-$HOME/.config}/screenshot-tray"
 pkill -f "$UUID/app/main.js" 2>/dev/null || true
 pkill -f "$HERE/extension/app/main.js" 2>/dev/null || true
 

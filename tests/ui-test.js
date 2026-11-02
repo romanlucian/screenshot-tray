@@ -14,6 +14,8 @@ import {
 } from '../extension/app/servers.js';
 import {SetupCancelled, SetupError} from '../extension/app/ssh.js';
 import {showAddServer} from '../extension/app/add-server.js';
+import {showHelp} from '../extension/app/help.js';
+import {SendButton} from '../extension/app/send-button.js';
 import {showSettings} from '../extension/app/settings.js';
 
 requireMadeUpHome();
@@ -455,6 +457,77 @@ fresh('Settings shows a server added while it is open', async () => {
     await pause();
     assertEqual(row(settings, '203.0.113.10')?.title, '203.0.113.10');
     await closed(settings);
+});
+
+// The server button on a card ----------------------------------------------------------
+
+const PI = {kind: 'added', ...pi};
+const BOX = {kind: 'ssh', name: 'build-box'};
+
+function sendButton() {
+    const sent = [];
+    const send = new SendButton({onSend: target => sent.push(target.name)});
+    new Gtk.Window({child: send.widget}).present();   // a list can only open inside a window
+    return {sent, send};
+}
+
+test('no targets: the button is hidden', () => {
+    const {send} = sendButton();
+    send.update([]);
+    assertEqual(send.widget.visible, false);
+    send.destroy();
+});
+test('one target: a click sends straight away, tooltip Send to Name', () => {
+    const {send, sent} = sendButton();
+    send.update([PI]);
+    assertEqual([send.widget.visible, send.widget.tooltip_text], [true, 'Send to Studio Pi']);
+    send.widget.emit('clicked');
+    assertEqual(sent, ['Studio Pi']);
+    send.destroy();
+});
+test('several targets: a click on a name in the list sends there', () => {
+    const {send, sent} = sendButton();
+    send.update([PI, BOX]);
+    assertEqual(send.widget.tooltip_text, 'Send to a server');
+    send.widget.emit('clicked');
+    assertEqual(sent, []);
+    button(send.widget, 'build-box').emit('clicked');
+    assertEqual(sent, ['build-box']);
+    send.destroy();
+});
+test('update() changes a card already showing', () => {
+    const {send, sent} = sendButton();
+    send.update([]);
+    send.update([PI, BOX]);
+    assertEqual(send.widget.visible, true);
+    send.update([BOX]);
+    assertEqual(button(send.widget, 'Studio Pi'), null);
+    send.widget.emit('clicked');
+    assertEqual(sent, ['build-box']);
+    send.destroy();
+});
+test('a busy button cannot be pressed, and comes back', () => {
+    const {send} = sendButton();
+    send.update([PI]);
+    send.setBusy(true);
+    assertEqual(send.widget.sensitive, false);
+    send.setBusy(false);
+    assertEqual(send.widget.sensitive, true);
+    send.destroy();
+});
+
+// How to use ------------------------------------------------------------------------
+
+fresh('How to use has one server row, and it opens Settings', async () => {
+    sshConfig('Host my-server\n');
+    const help = showHelp();
+    assertEqual(rows(help).filter(item => item.title === 'my-server' || item.title === 'Edit the server list'), []);
+    row(help, 'Send to a server').emit('activated');
+    await pause();
+    const settings = everything().find(widget => widget instanceof Adw.PreferencesDialog && widget.title === 'Settings');
+    assertEqual(row(settings, 'my-server')?.title, 'my-server');
+    await closed(settings);
+    await closed(help);
 });
 
 reset();

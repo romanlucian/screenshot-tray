@@ -486,24 +486,3 @@ export async function removeServerKey(server) {
     }
 }
 
-// Opens ~/.ssh/config in the text editor, first creating it with an example if missing.
-export function openSshConfig(launchContext) {
-    const dir = GLib.build_filenamev([GLib.get_home_dir(), '.ssh']);
-    const path = GLib.build_filenamev([dir, 'config']);
-    if (!GLib.file_test(path, GLib.FileTest.EXISTS)) {
-        GLib.mkdir_with_parents(dir, 0o700);
-        const example = [
-            '# Servers for SSH, and for "Send to a server" in Screenshot Tray.',
-            '# Copy these three lines for each server, remove the # signs, and fill them in:',
-            '#',
-            '# Host myserver',
-            '#     HostName 203.0.113.5',
-            '#     User myname',
-            '',
-        ].join('\n');
-        // PRIVATE: readable by you only, as SSH expects of this file.
-        Gio.File.new_for_path(path).replace_contents(new TextEncoder().encode(example),
-            null, false, Gio.FileCreateFlags.PRIVATE, null);
-    }
-    Gio.AppInfo.launch_default_for_uri(Gio.File.new_for_path(path).get_uri(), launchContext);
-}
