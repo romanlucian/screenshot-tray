@@ -166,6 +166,13 @@ fresh('Settings has three tabs, and General comes first', async () => {
     assertEqual(dialog.visible_page_name, 'general');
     await closed(dialog);
 });
+fresh('the keyboard does not start in a number field, where a stray key changes a setting', async () => {
+    const dialog = open();
+    await pause(100);
+    assertEqual(rows(pageOf(dialog, 'general'))[0].title, 'Screen corner');
+    assertEqual(dialog.get_root().get_focus() instanceof Gtk.Text, false);
+    await closed(dialog);
+});
 fresh('every tab has an icon the desktop can draw', async () => {
     const dialog = open();
     const theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default());

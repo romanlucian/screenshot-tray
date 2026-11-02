@@ -20,7 +20,8 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 const APP_ID = 'com.zincoo.ScreenshotTray';
 const APP_PATH = '/com/zincoo/ScreenshotTray';
-const TRAY_TITLE = 'Screenshot Tray';   // the tray window's title in app/main.js
+const TRAY_TITLE = 'Screenshot Tray';   // the tray window's title in app/tray.js
+const SETTINGS_TITLE = 'Settings';      // the Settings window's title in app/settings.js
 const MARGIN = 16;              // logical pixels from the screen edges
 const QUICK_EXIT_MS = 10000;    // a tray that stops sooner than this counts as a crash
 const MAX_CRASHES = 5;          // after that, leave it off until the next login
@@ -39,6 +40,7 @@ export default class ScreenshotTray extends Extension {
         this._displayIds = [
             global.display.connect('window-created', (_display, window) => this._adopt(window)),
             global.display.connect('workareas-changed', () => this._placeAll()),
+            global.display.connect('window-demands-attention', (_display, window) => this._bringToFront(window)),
         ];
         this._settings.get_string('corner');    // settings only report keys that were read
         this._cornerId = this._settings.connect('changed::corner', () => this._placeAll());
@@ -113,6 +115,14 @@ export default class ScreenshotTray extends Extension {
         } catch (e) {
             console.error(`Screenshot Tray: ${e.message}`);
         }
+    }
+
+    // Settings asks to come to the front when opened again, but GNOME refuses any window
+    // that wasn't just clicked and only says it's "ready". It would stay hidden behind your
+    // work, so the desktop's own side says yes to this one.
+    _bringToFront(window) {
+        if (this._client?.owns_window(window) && window.get_title() === SETTINGS_TITLE)
+            Main.activateWindow(window);
     }
 
     disable() {

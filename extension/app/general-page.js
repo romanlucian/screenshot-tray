@@ -29,15 +29,17 @@ export function generalPage() {
         icon_name: 'emblem-system-symbolic',
     });
 
+    // The corner comes first because the keyboard starts on the first row. In the number
+    // field a stray key would change a setting, and here it can't.
     const tray = new Adw.PreferencesGroup({title: 'Tray'});
+    tray.add(choiceRow('Screen corner', '', CORNERS, settings.get_string('corner'),
+        corner => settings.set_string('corner', corner)));
     const cards = Adw.SpinRow.new_with_range(1, 5, 1);
     cards.title = 'Cards to keep';
     cards.subtitle = 'How many float at once. The oldest go to Bring back.';
     cards.value = settings.get_int('max-cards');
     cards.connect('notify::value', () => settings.set_int('max-cards', cards.value));
     tray.add(cards);
-    tray.add(choiceRow('Screen corner', '', CORNERS, settings.get_string('corner'),
-        corner => settings.set_string('corner', corner)));
     page.add(tray);
 
     const behaviour = new Adw.PreferencesGroup({title: 'Cards'});

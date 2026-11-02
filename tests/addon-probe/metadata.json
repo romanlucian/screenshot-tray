@@ -1,0 +1,6 @@
+{
+  "uuid": "probe@screenshot-tray.test",
+  "name": "Test probe",
+  "description": "For tests/addon.sh only: lets the test look inside the invisible GNOME Shell and press keys there.",
+  "shell-version": ["50"]
+}
