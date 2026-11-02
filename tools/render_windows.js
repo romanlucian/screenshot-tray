@@ -30,6 +30,7 @@ const madeUpDeps = {
     checkTarget: async () => {},
     removeServerKey: async () => true,
     forgetServerId: async () => {},
+    addOnIsUpToDate: async () => true,
 };
 
 // Waits until the window has been laid out (up to 10 seconds), then draws it.
@@ -71,9 +72,13 @@ async function drawAll() {
     addServer(parseServerInput({address: '203.0.113.10', user: 'lucian', name: 'Studio Pi'}));
     setSshHostOn('my-server', true);
     const settings = showSettings(madeUpDeps);
+    await drawWhenReady(settings, `${out}/settings-general.png`);
+    settings.visible_page_name = 'servers';
     button(row(settings, 'Studio Pi'), 'Test').emit('clicked');
     button(row(settings, 'my-server'), 'Test').emit('clicked');
-    await drawWhenReady(settings, `${out}/settings.png`);
+    await drawWhenReady(settings, `${out}/settings-servers.png`);
+    settings.visible_page_name = 'shortcuts';
+    await drawWhenReady(settings, `${out}/settings-shortcuts.png`);
     settings.close();
 
     const form = showAddServer(null, madeUpDeps);

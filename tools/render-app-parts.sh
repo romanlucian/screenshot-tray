@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Draws the real parts of the app that the README pictures are made from: the tray,
-# the "How to use", "About", "Settings" and "Add a server" windows (dark style), the
+# the "How to use", "About", the three Settings tabs and "Add a server" (dark style), the
 # icon, and the made-up demo screenshots in tools/demo. Nothing appears on the desktop:
 # GTK draws into a private, invisible Broadway display with its own message bus, and the
 # servers shown are made up, so nothing of yours ends up in a picture.

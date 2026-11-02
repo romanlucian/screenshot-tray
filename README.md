@@ -50,6 +50,8 @@ cd screenshot-tray
 Then **log out and back in once**, because GNOME loads new add-ons only at login. After
 that the tray starts by itself, and its icon appears in the top bar.
 
+**To update later:** run `git pull` and `./install.sh`, then log out and back in once.
+
 > **Tip:** to paste a screenshot into Claude Code in a terminal with <kbd>Ctrl</kbd>+<kbd>V</kbd>
 > instead of dragging it, install the clipboard helper: `sudo apt install wl-clipboard`.
 
@@ -57,9 +59,10 @@ that the tray starts by itself, and its icon appears in the top bar.
 
 | | |
 |---|---|
-| **Floating stack** | Each new screenshot appears in the bottom-left corner, above your windows. The 5 newest stay. |
+| **Floating stack** | Each new screenshot appears in the corner of the screen, above your windows. Up to 5 stay. |
 | **Drag into any app** | A terminal gets the file's path; a browser, chat or email gets the file. |
-| **Tidies itself** | A card leaves once an app accepts it. **Clear all** empties the tray, and it hides when empty. |
+| **Tidies itself** | A card leaves once an app accepts it, unless you choose to keep it. **Clear all** empties the tray, and it hides when empty. |
+| **Settings** | The gear above your cards: the corner, how many cards stay, hiding old ones, your servers and your keyboard shortcuts. |
 | **Bring back** | Closed a card by mistake? Bring it back from the tray or the top-bar menu. |
 | **Send to a server** | For Claude Code or Codex on another computer: set up a server in *Settings*, then one click uploads the screenshot over SSH and copies its path there. |
 | **Top-bar icon** | Reaches the tray even while it's hidden: bring back, clear, open the folder, settings, help, quit. |
@@ -71,6 +74,25 @@ that the tray starts by itself, and its icon appears in the top bar.
 
 <img src="docs/inside.png" width="100%" alt="The tray, the Settings window with its list of servers, the top-bar menu, and the About window">
 
+## Settings
+
+<img src="docs/settings.png" width="100%" alt="The three Settings tabs: General with the screen corner and card options, Servers with the list of servers, and Shortcuts with GNOME's screenshot keys and the tray's own">
+
+Press the **gear** above your cards, choose *Settings…* in the top-bar menu, or right-click
+the app's icon and choose **Settings**.
+
+- **General:** bottom-left or bottom-right corner, 1 to 5 cards, keeping a card after you drag
+  it, and hiding old cards after 5, 15 or 60 minutes. Hidden cards go to *Bring back*, and
+  the files stay.
+- **Servers:** see below.
+- **Shortcuts:** GNOME's own shortcuts for taking a screenshot, and shortcuts for the tray.
+  The tray's start empty, so they can't clash with anything. A combination GNOME already uses
+  just does its usual job, so choose another one. A letter alone isn't allowed, because
+  it would break typing.
+
+The screen corner and the tray's shortcuts come from the GNOME add-on, so they start working
+after you log out and back in once. *Settings* tells you when that's still needed.
+
 ## Sending to a server
 
 <img src="docs/add-server.png" width="100%" alt="The Add a server form with address, username and password, beside its finished checklist: found the server, logged in, installed a secure key, sending works">
@@ -79,7 +101,7 @@ The server button on each card is for Claude Code or Codex running on another co
 over SSH. It uploads the screenshot to that computer and copies its path there: click in
 that terminal and press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd>.
 
-**To set one up:** top-bar icon → *Settings…* → *Add a server…*. Enter the address, your
+**To set one up:** open *Settings* → *Servers* → *Add a server…*. Enter the address, your
 username and your password, then press **Connect**. It works with a **Linux or Mac
 server**, such as a cloud machine, a home server or a Raspberry Pi.
 
@@ -119,6 +141,7 @@ Everything goes in your own home folder. It needs no `sudo` and changes no syste
 | The app's icon, as a link to `data/` | `~/.local/share/icons/hicolor/scalable/apps/com.zincoo.ScreenshotTray.svg` |
 | The tray's note of which cards are showing, and which left | `~/.cache/screenshot-tray/cards.json` |
 | The list of servers, the app's own key, and the server IDs you trusted | `~/.config/screenshot-tray/` (private to your account) |
+| The choices in *Settings*, once you change one | GNOME's settings, under `/org/gnome/shell/extensions/screenshot-tray/` |
 | On a server you send to: the screenshots you sent | `~/.cache/screenshot-tray/inbox/` (private to your account) |
 | On a server you added: one line for the limited key | `~/.ssh/authorized_keys` |
 
@@ -129,7 +152,8 @@ Everything goes in your own home folder. It needs no `sudo` and changes no syste
 ```
 
 This removes everything in the table above from this computer, and your screenshots are
-never touched. It can't reach your servers, so remove them in *Settings* first: that also
+never touched. GNOME's own screenshot shortcuts stay as you set them: *Settings* can put them
+back to GNOME's defaults before you uninstall. It can't reach your servers, so remove them in *Settings* first: that also
 takes the key's line off each one. A line left behind is useless without this computer's
 key. Screenshots you sent stay in that server's inbox folder.
 
@@ -187,11 +211,11 @@ ordinary GTK app.
 ```mermaid
 flowchart TB
     subgraph shell ["GNOME Shell"]
-        X["<b>Add-on</b> · extension/extension.js<br/>starts the tray, pins it bottom-left, keeps it on top,<br/>adds the top-bar icon and menu"]
+        X["<b>Add-on</b> · extension/extension.js<br/>starts the tray, pins it in the chosen corner, keeps it on top,<br/>adds the top-bar icon and menu, listens for the tray's shortcuts"]
     end
     subgraph app ["The tray app (GJS + GTK 4)"]
-        Y["<b>Tray</b> · extension/app/main.js<br/>watches the Screenshots folder, shows the cards,<br/>handles drag and drop"]
-        S["<b>Settings</b> · extension/app/settings.js, add-server.js<br/><b>Help and About</b> · extension/app/help.js"]
+        Y["<b>Tray</b> · extension/app/main.js, tray.js<br/>watches the Screenshots folder, shows the cards,<br/>handles drag and drop"]
+        S["<b>Settings</b> · extension/app/settings.js, general-page.js,<br/>shortcuts-page.js, add-server.js, preferences.js<br/><b>Help and About</b> · extension/app/help.js"]
         Z["<b>Server list</b> · extension/app/servers.js, no network<br/><b>Every SSH call</b> · extension/app/ssh.js, askpass.sh"]
     end
     X -- "launches as a trusted window" --> Y
@@ -207,13 +231,17 @@ flowchart TB
 - **Without the add-on** (for example before the first log-out), the tray runs as an
   ordinary window: `gjs -m extension/app/main.js`. Drag it by its title bar, then
   right-click the title bar for *Always on Top*.
+- **The settings** are described in `extension/schemas/`. After changing that file, run
+  `glib-compile-schemas extension/schemas` and commit the result; `tests/run.sh` checks it.
 - **The README pictures** are designed from real parts of the app, which
   `tools/render-app-parts.sh` draws off-screen using the made-up demo screenshots in
   `tools/demo/` and a made-up server list. No real screenshot or setting of yours is ever
   published.
 - **Tests:** `tests/run.sh` needs nothing special, `tests/ui.sh` presses the real windows on
-  an invisible display, and `tests/integration.sh` sets up and sends to real SSH servers in
-  throwaway Docker containers, on 127.0.0.1 only. All of them use a made-up home folder.
+  an invisible display, `tests/addon.sh` runs the real add-on and tray in a separate, invisible
+  GNOME Shell and presses real keys and clicks there, and `tests/integration.sh` sets up and
+  sends to real SSH servers in throwaway Docker containers, on 127.0.0.1 only. All of them use
+  a made-up home folder.
 - Built for GNOME 50: a newer GNOME may need the add-on updated.
 
 </details>

@@ -160,6 +160,7 @@ test('the add-on loads at login with no error, at the version the app asks for',
 test('a new screenshot in the folder makes the tray appear, with its gear', async () => {
     resetSettings();
     setSshHostOn('build-box', true);    // cards pick up the list when they appear
+    await pause(1500);                  // the tray starts watching just after it's on the bus
     takeScreenshot(1);
     await until('the tray window', () => trayWindow());
     await until('the tray in place', () => trayWindow().x === trayWindow().areaX + MARGIN);
@@ -308,6 +309,39 @@ test('a real key press opens Settings', async () => {
     probe('trayProbe.press("F6")');
     await until('Settings to open', () => settingsWindow());
     await closeSettings();
+    shortcut('shortcut-settings', '');
+});
+test('recording a shortcut works with real keys: tab, row, keys, and then it runs', async () => {
+    await emptyTray();
+    shortcut('shortcut-settings', 'F6');
+    await pause(500);
+    probe('trayProbe.press("F6")');
+    await settingsInFront('to record a shortcut');
+    await pause(400);
+    const win = settingsWindow();
+    probe(`trayProbe.moveTo(${win.x + 443}, ${win.y + 22})`);   // the Shortcuts tab
+    await pause(150);
+    probe('trayProbe.click()');
+    await pause(500);
+    savePicture('shortcuts-tab');
+    probe(`trayProbe.moveTo(${win.x + 200}, ${win.y + 397})`);  // Bring back the last closed
+    await pause(150);
+    probe('trayProbe.click()');
+    await pause(500);
+    savePicture('shortcut-question');
+    probe('trayProbe.press("Control_L", "Alt_L", "k")');
+    await until('the keys to be saved', () => {
+        Gio.Settings.sync();
+        return prefs.get_strv('shortcut-restore-last').length === 1;
+    }, 6);
+    savePicture('shortcut-saved');
+    assertEqual(prefs.get_strv('shortcut-restore-last')[0].toLowerCase().replace('primary', 'control'), '<control><alt>k');
+    await pause(300);
+    await closeSettings();
+    await pause(500);
+    probe('trayProbe.press("Control_L", "Alt_L", "k")');
+    await until('the recorded shortcut to bring a card back', () => savedCards() === 1);
+    prefs.reset('shortcut-restore-last');
     shortcut('shortcut-settings', '');
 });
 test('switching the add-on off takes its shortcuts and tray away, and back on is clean', async () => {
