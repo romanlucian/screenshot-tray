@@ -7,7 +7,7 @@ import GLib from 'gi://GLib';
 
 import {assertEqual, finish, requireMadeUpHome, test} from './lib.js';
 import {
-    checkTarget, cleanRemotePath, explainSshError, runCommand, safeRemoteName, sendTo,
+    checkTarget, cleanRemotePath, explainSshError, keyLine, runCommand, safeRemoteName, sendTo,
 } from '../extension/app/ssh.js';
 
 requireMadeUpHome();
@@ -99,6 +99,8 @@ const MESSAGES = [
     ['sh: 1: cannot create x: Disk quota exceeded', 'ssh', 'pi is out of disk space.'],
     ['Timeout, server h not responding.', 'added', 'pi stopped responding.'],
     ['client_loop: send disconnect: Broken pipe', 'ssh', 'pi stopped responding.'],
+    ['kex_exchange_identification: Connection closed by remote host', 'added', 'pi closed the connection. If you just tried several times, wait a minute and try again.'],
+    ['kex_exchange_identification: read: Connection reset by peer', 'ssh', 'pi closed the connection. If you just tried several times, wait a minute and try again.'],
     ['first line\nsomething odd happened', 'ssh', "Couldn't send to pi: something odd happened"],
 ];
 for (const [stderr, kind, message] of MESSAGES) {
@@ -159,10 +161,18 @@ test('sendTo turns a failure into a plain sentence', async () => {
     const picture = `${home}/a.png`;
     GLib.file_set_contents(picture, 'x');
     GLib.setenv('PATH', `${here}/fakes:${realPath}`, true);
+    useFakeSsh('', 3);
+    const message = await messageFrom(sendTo({kind: 'ssh', name: 'my-server'}, picture));
+    GLib.setenv('PATH', realPath, true);
+    assertEqual(message, "Couldn't send to my-server: ssh stopped with code 3");
+});
+test('ssh giving up with no words means the connection was closed', async () => {
+    const picture = `${home}/a.png`;
+    GLib.file_set_contents(picture, 'x');
     useFakeSsh('', 255);
     const message = await messageFrom(sendTo({kind: 'ssh', name: 'my-server'}, picture));
     GLib.setenv('PATH', realPath, true);
-    assertEqual(message, "Couldn't send to my-server: ssh stopped with code 255");
+    assertEqual(message, 'my-server closed the connection. If you just tried several times, wait a minute and try again.');
 });
 test('checkTarget on an SSH entry runs only the shell', async () => {
     useFakeSsh();
@@ -171,6 +181,26 @@ test('checkTarget on an SSH entry runs only the shell', async () => {
     const args = fakeSshArguments();
     assertEqual(args.at(-1), "sh -c 'exit 0'");
     assertEqual(args[args.indexOf('--') + 1], 'my-server');
+});
+
+const askpass = `${here}/../extension/app/askpass.sh`;
+test('askpass answers a password prompt, exactly', async () => {
+    const r = await runCommand([askpass, "user@h's password: "],
+        {env: {SCREENSHOT_TRAY_PASSWORD: 'p@ss w"o\'r\\d$é'}, limitSeconds: 5});
+    assertEqual([r.success, r.stdout], [true, 'p@ss w"o\'r\\d$é\n']);
+});
+for (const prompt of ['Verification code: ', 'Enter passphrase for key: ', 'Are you sure (yes/no)? ']) {
+    test(`askpass refuses: ${prompt}`, async () => {
+        const r = await runCommand([askpass, prompt], {env: {SCREENSHOT_TRAY_PASSWORD: 'secret'}, limitSeconds: 5});
+        assertEqual([r.success, r.stdout, r.stderr.trim()], [false, '', 'screenshot-tray: unsupported prompt']);
+    });
+}
+
+test('the key line is one line, limited, and marked with its id', () => {
+    const line = keyLine('ssh-ed25519 AAAA', 'abc123');
+    assertEqual(line.includes('\n'), false);
+    assertEqual(line.startsWith('restrict,command="'), true);
+    assertEqual(line.endsWith('" ssh-ed25519 AAAA screenshot-tray-abc123'), true);
 });
 
 await finish();

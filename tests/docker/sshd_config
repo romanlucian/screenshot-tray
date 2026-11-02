@@ -1,0 +1,13 @@
+# A throwaway test server: only ever reachable on 127.0.0.1 of this computer.
+HostKey /etc/ssh/ssh_host_ed25519_key
+HostKey /etc/ssh/ssh_host_rsa_key
+PasswordAuthentication yes
+KbdInteractiveAuthentication no
+MaxAuthTries 20
+AllowTcpForwarding yes
+PrintMotd no
+# These tests fail on purpose, many times a minute. One test turns this back on.
+PerSourcePenalties no
+
+Match User keyonly
+    PasswordAuthentication no

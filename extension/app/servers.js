@@ -65,6 +65,14 @@ export function configDir() {
     return GLib.build_filenamev([GLib.get_user_config_dir(), 'screenshot-tray']);
 }
 
+// The app's folder, readable by this user only. Returns its path.
+export function ensureConfigDir() {
+    GLib.mkdir_with_parents(configDir(), 0o700);
+    Gio.File.new_for_path(configDir()).set_attribute_uint32('unix::mode', 0o700,
+        Gio.FileQueryInfoFlags.NONE, null);
+    return configDir();
+}
+
 function listPath() {
     return GLib.build_filenamev([configDir(), 'servers.json']);
 }
@@ -105,9 +113,7 @@ export function loadList() {
 const listeners = new Set();
 
 export function saveList({added, sshOn}) {
-    const folder = Gio.File.new_for_path(configDir());
-    GLib.mkdir_with_parents(configDir(), 0o700);
-    folder.set_attribute_uint32('unix::mode', 0o700, Gio.FileQueryInfoFlags.NONE, null);
+    ensureConfigDir();
     const json = `${JSON.stringify({version: 1, added, sshOn}, null, 2)}\n`;
     // PRIVATE with REPLACE_DESTINATION: a whole new file, readable by this user only.
     Gio.File.new_for_path(listPath()).replace_contents(new TextEncoder().encode(json), null, false,

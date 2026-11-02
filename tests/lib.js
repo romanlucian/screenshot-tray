@@ -53,8 +53,11 @@ export function requireMadeUpHome() {
 export async function finish() {
     const loop = new GLib.MainLoop(null, false);
     let failed = 0;
+    // TEST_ONLY=some-words runs only the tests whose names hold those words.
+    const only = GLib.getenv('TEST_ONLY');
+    const chosen = only ? tests.filter(([name]) => name.includes(only)) : tests;
     const run = async () => {
-        for (const [name, fn] of tests) {
+        for (const [name, fn] of chosen) {
             try {
                 await fn();
                 print(`ok    ${name}`);
@@ -67,6 +70,6 @@ export async function finish() {
     };
     run();
     await loop.runAsync();
-    print(`${tests.length - failed} of ${tests.length} passed`);
+    print(`${chosen.length - failed} of ${chosen.length} passed`);
     System.exit(failed ? 1 : 0);
 }
