@@ -8,7 +8,6 @@
 
 import Adw from 'gi://Adw?version=1';
 import Gdk from 'gi://Gdk?version=4.0';
-import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk?version=4.0';
 
 import {
@@ -57,8 +56,7 @@ function askForKeys(dialog, title, key, place, places) {
         } else if (pressed) {
             const other = usedBy(pressed.accelerator, key, places);
             if (other) {
-                question.body = `That is already the shortcut for ${GLib.markup_escape_text(other, -1)}. ` +
-                    'Clear it there first, or press other keys.';
+                question.body = `That is already the shortcut for ${other}. Clear it there first, or press other keys.`;
             } else {
                 settings.set_strv(key, [pressed.accelerator]);
                 question.close();

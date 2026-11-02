@@ -5,11 +5,19 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
+import System from 'system';
+
 import {assertEqual, finish, requireMadeUpHome, test} from './lib.js';
-import {traySettings} from '../extension/app/preferences.js';
+import {addOnIsUpToDate, traySettings} from '../extension/app/preferences.js';
 import {setSshHostOn} from '../extension/app/servers.js';
 
 requireMadeUpHome();
+// This test switches the add-on off and on: never run it against the real desktop.
+if (GLib.getenv('DBUS_SYSTEM_BUS_ADDRESS') !== GLib.getenv('DBUS_SESSION_BUS_ADDRESS') ||
+    !GLib.get_user_runtime_dir().startsWith('/var/tmp/')) {
+    print('Refusing to run: use tests/addon.sh, which starts a private, invisible desktop.');
+    System.exit(2);
+}
 
 const ADDON = 'screenshot-tray@zincoo.com';
 const APP_ID = 'com.zincoo.ScreenshotTray';
@@ -157,6 +165,9 @@ test('the add-on loads at login with no error, at the version the app asks for',
         return owned;
     }, 30);
 });
+test('the app can tell the running add-on is up to date', async () => {
+    assertEqual(await addOnIsUpToDate(), true);
+});
 test('a new screenshot in the folder makes the tray appear, with its gear', async () => {
     resetSettings();
     setSshHostOn('build-box', true);    // cards pick up the list when they appear
@@ -196,6 +207,19 @@ test('Settings left open behind another app comes back to the front with the sho
     await until('the other app in front', () => windowTitled('Other app').focused);
     probe('trayProbe.press("F6")');
     await settingsInFront('shortcut, already open');
+    assertEqual(probe('trayProbe.notices()').filter(title => title.includes('ready')), []);
+});
+test('Settings beside another app, not covered by it, also gets the keyboard', async () => {
+    probe('trayProbe.place("Other app", 0, 40, 300, 300)');
+    await pause(400);
+    const beside = [windowTitled('Other app'), settingsWindow()];
+    assertEqual(beside[0].x + beside[0].width <= beside[1].x, true);
+    probe('trayProbe.focus("Other app")');
+    await until('the other app in front', () => windowTitled('Other app').focused);
+    probe('trayProbe.press("F6")');
+    await settingsInFront('shortcut, beside another app');
+    probe('trayProbe.place("Other app", 0, 40, 1100, 700)');
+    await pause(300);
 });
 test('Settings left open behind another app comes back to the front with the gear', async () => {
     probe('trayProbe.focus("Other app")');
@@ -330,10 +354,15 @@ test('recording a shortcut works with real keys: tab, row, keys, and then it run
     await pause(500);
     savePicture('shortcut-question');
     probe('trayProbe.press("Control_L", "Alt_L", "k")');
-    await until('the keys to be saved', () => {
-        Gio.Settings.sync();
-        return prefs.get_strv('shortcut-restore-last').length === 1;
-    }, 6);
+    try {
+        await until('the keys to be saved', () => {
+            Gio.Settings.sync();
+            return prefs.get_strv('shortcut-restore-last').length === 1;
+        }, 6);
+    } catch (e) {
+        savePicture('shortcut-not-saved');
+        throw e;
+    }
     savePicture('shortcut-saved');
     assertEqual(prefs.get_strv('shortcut-restore-last')[0].toLowerCase().replace('primary', 'control'), '<control><alt>k');
     await pause(300);
@@ -350,11 +379,14 @@ test('switching the add-on off takes its shortcuts and tray away, and back on is
     setAddOn(false);
     await until('the add-on to stop', () => addOnInfo().state === 2);
     await until('the tray window to go', () => !trayWindow());
+    for (const action of ['restore-last', 'show-recent', 'clear', 'settings'])
+        assertEqual([action, probe(`trayProbe.hasKeybinding("shortcut-${action}")`)], [action, false]);
     probe('trayProbe.press("F6")');
     await pause(800);
     assertEqual(settingsWindow() ?? null, null);
     setAddOn(true);
     await until('the add-on to run again', () => addOnInfo().state === 1);
+    assertEqual(probe('trayProbe.hasKeybinding("shortcut-settings")'), true);
     await pause(1500);
     probe('trayProbe.press("F6")');
     await settingsInFront('shortcut, after switching back on');
@@ -375,4 +407,25 @@ test('Settings on the app icon switches the add-on back on, and opens', async ()
     await pause(300);
     await closeSettings();
 });
+test('Settings on the app icon, while the tray is still starting, reaches that tray', async () => {
+    setAddOn(false);
+    await until('the add-on to stop', () => addOnInfo().state === 2);
+    await until('the tray to go', () => !trayWindow());
+    await pause(1500);
+    setAddOn(true);
+    await until('the add-on to run again', () => addOnInfo().state === 1);
+    const launch = Gio.Subprocess.new(['timeout', '30', 'gjs', '-m', `${TEST_DIR}/../extension/app/main.js`, '--settings'],
+        Gio.SubprocessFlags.STDERR_SILENCE);
+    await settingsInFront('app icon menu, tray starting');
+    launch.force_exit();
+    await pause(300);
+    await closeSettings();
+    takeScreenshot(4);
+    await until('the pinned tray to show a new screenshot', () => {
+        const tray = trayWindow();
+        return tray && tray.above && tray.onAllWorkspaces;
+    });
+    assertEqual(addOnInfo().state, 1);
+});
+
 await finish();

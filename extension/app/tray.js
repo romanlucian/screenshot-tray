@@ -115,7 +115,7 @@ class Card {
             this.dragBegan();
         });
         drag.connect('drag-cancel', (_source, _drag, reason) => {
-            this._dragRefused = true;
+            this.dragRefused();
             log(`drag of ${GLib.path_get_basename(this.path)} not accepted: ${enumName(Gdk.DragCancelReason, reason)}`);
             return false;
         });
@@ -201,6 +201,10 @@ class Card {
         this._dragRefused = false;
         this._dragging = true;
         this.widget.add_css_class('dragging');
+    }
+
+    dragRefused() {
+        this._dragRefused = true;
     }
 
     dragEnded(action) {
@@ -528,7 +532,7 @@ export class Tray {
             if (this._has(path) || !GLib.file_test(path, GLib.FileTest.EXISTS))
                 continue;
             try {
-                this._add(new Card(this, path));
+                this._add(new Card(this, path), {makeRoomAtTheBack: true});
             } catch {
                 continue;
             }
@@ -597,7 +601,7 @@ export class Tray {
         return this._cards.some(card => card.path === path);
     }
 
-    _add(card) {
+    _add(card, {makeRoomAtTheBack = false} = {}) {
         log(`showing ${GLib.path_get_basename(card.path)}`);
         this._cards.push(card);
         // Pinned in the bottom corner, the newest goes at the bottom, nearest the corner.
@@ -607,17 +611,19 @@ export class Tray {
         else
             this._box.insert_child_after(card.widget, this._placeholder);
         card.widget.halign = this._alignment ?? Gtk.Align.START;
-        this._trim();
+        this._trim(makeRoomAtTheBack);
     }
 
-    _trim() {
+    // A card pushed out by one being brought back goes behind the others, so pressing
+    // Bring back again moves on to an older card, not back and forth between two.
+    _trim(toTheBack = false) {
         const limit = traySettings().get_int('max-cards');
         while (this._cards.length > limit)
-            this._remove(this._cards[0]);
+            this._remove(this._cards[0], true, toTheBack);
     }
 
     // A card that leaves is remembered for "Bring back", unless its file is gone.
-    _remove(card, remember = true) {
+    _remove(card, remember = true, toTheBack = false) {
         const index = this._cards.indexOf(card);
         if (index < 0)
             return;
@@ -626,7 +632,10 @@ export class Tray {
         card.destroy();
         if (remember) {
             this._closed = this._closed.filter(path => path !== card.path);
-            this._closed.push(card.path);
+            if (toTheBack)
+                this._closed.unshift(card.path);
+            else
+                this._closed.push(card.path);
             this._closed.splice(0, Math.max(0, this._closed.length - MAX_CLOSED));
         }
     }

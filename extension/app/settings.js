@@ -164,7 +164,8 @@ export function showSettings(deps = settingsDeps, pageName = null) {
     }
     const dialog = new Adw.PreferencesDialog({title: TITLE, search_enabled: false});
     dialog.connect('closed', () => {
-        openDialog = null;
+        if (openDialog === dialog)
+            openDialog = null;
     });
 
     const general = generalPage();
@@ -185,4 +186,15 @@ export function showSettings(deps = settingsDeps, pageName = null) {
     dialog.present(null);
     openDialog = dialog;
     return dialog;
+}
+
+// For a request from outside this app's windows: the top-bar menu, a shortcut, the app icon.
+// GNOME doesn't let a window already open come forward without a click in this app, so it
+// would stay hidden behind your work. A new window does come to the front, on the same tab.
+export function bringSettingsForward() {
+    const previous = openDialog;
+    const page = previous?.visible_page_name ?? null;
+    openDialog = null;
+    previous?.close();
+    return showSettings(settingsDeps, page);
 }

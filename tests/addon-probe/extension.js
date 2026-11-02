@@ -22,6 +22,11 @@ export default class Probe extends Extension {
         globalThis.trayProbe = {
             ready: () => !Main.layoutManager._startingUp && Main.sessionMode.currentMode !== undefined,
             leaveOverview: () => Main.overview.hide(),
+            hasKeybinding: name => Boolean(Main.wm._allowedKeybindings[name]),
+            notices: () => Main.messageTray.getSources().flatMap(source => source.notifications.map(notice => notice.title)),
+            place: (title, x, y, width, height) => global.get_window_actors()
+                .find(item => item.meta_window.get_title() === title).meta_window
+                .move_resize_frame(false, x, y, width, height),
             openFromAppIconMenu: () => Shell.AppSystem.get_default().lookup_app('com.zincoo.ScreenshotTray.desktop')
                 .launch_action('settings', global.get_current_time(), -1),
             focus: title => {

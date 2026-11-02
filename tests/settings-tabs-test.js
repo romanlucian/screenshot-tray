@@ -16,7 +16,7 @@ import {showHelp} from '../extension/app/help.js';
 import {
     ADDON_VERSION, gnomeShortcuts, passesThrough, readShortcut, traySettings,
 } from '../extension/app/preferences.js';
-import {showSettings} from '../extension/app/settings.js';
+import {bringSettingsForward, showSettings} from '../extension/app/settings.js';
 import {Tray} from '../extension/app/tray.js';
 
 requireMadeUpHome();
@@ -148,6 +148,13 @@ test('a letter alone is refused, because it would break typing', () => {
     assertEqual(Boolean(readShortcut(Gdk.KEY_4, 0).error), true);
     assertEqual(Boolean(readShortcut(Gdk.KEY_Delete, 0).error), true);
 });
+test('numpad keys and accent keys alone are refused too', () => {
+    for (const key of [Gdk.KEY_KP_Delete, Gdk.KEY_KP_Home, Gdk.KEY_KP_Up, Gdk.KEY_dead_acute, Gdk.KEY_Menu])
+        assertEqual([Gdk.keyval_name(key), Boolean(readShortcut(key, 0).error)], [Gdk.keyval_name(key), true]);
+});
+test('a media key works alone', () => {
+    assertEqual(parsed(readShortcut(Gdk.KEY_Launch9, 0).accelerator), [Gdk.keyval_name(Gdk.KEY_Launch9), 0]);
+});
 test('a modifier alone keeps waiting for the rest', () => {
     for (const key of [Gdk.KEY_Shift_L, Gdk.KEY_Control_R, Gdk.KEY_Alt_L, Gdk.KEY_Super_L, Gdk.KEY_ISO_Level3_Shift, Gdk.KEY_Caps_Lock])
         assertEqual(readShortcut(key, 0), null);
@@ -186,6 +193,18 @@ fresh('Settings can open on one tab, also when already open', async () => {
     assertEqual(open('shortcuts') === dialog, true);
     assertEqual(dialog.visible_page_name, 'shortcuts');
     await closed(dialog);
+});
+fresh('asked for from outside, Settings opens as a new window on the same tab', async () => {
+    const first = open('shortcuts');
+    await pause();
+    const second = bringSettingsForward();
+    await pause(100);
+    assertEqual([second === first, second.visible_page_name], [false, 'shortcuts']);
+    assertEqual(open() === second, true);   // the new window is the open one, also after the old one closed
+    await closed(second);
+    const third = bringSettingsForward();
+    assertEqual(third === second, false);
+    await closed(third);
 });
 fresh('How to use opens the Servers tab', async () => {
     const help = showHelp();
@@ -439,11 +458,42 @@ freshTray('Keep after dragging keeps a delivered card', async () => {
     await pause();
     assertEqual(shown().length, 1);
 });
-freshTray('a refused drag always keeps the card', async () => {
+freshTray('a refused drag always keeps the card, whatever action it reports', async () => {
+    tray.preload(1);
+    const [card] = tray.cards;
+    card.dragBegan();
+    card.dragRefused();
+    card.dragEnded(Gdk.DragAction.COPY);
+    await pause();
+    assertEqual(shown().length, 1);
+});
+freshTray('a drag with no action keeps the card', async () => {
     tray.preload(1);
     tray.cards[0].dragEnded(0);
     await pause();
     assertEqual(shown().length, 1);
+});
+freshTray('with one card allowed, Bring back walks through all that left', async () => {
+    prefs.set_int('max-cards', 1);
+    await pause();
+    tray.preload(3);    // each pushes the one before out
+    const seen = new Set(shown());
+    for (let press = 0; press < 3; press++) {
+        tray.restoreLast();
+        seen.add(shown()[0]);
+    }
+    assertEqual(seen.size >= 3, true);
+});
+freshTray('a full tray: Bring back walks back too, not between two cards', async () => {
+    tray.preload(6);
+    tray.dismiss(tray.cards[0]);
+    tray.preload(6);    // fills up again, pushing older ones out
+    const seen = [];
+    for (let press = 0; press < 4; press++) {
+        tray.restoreLast();
+        seen.push(shown().at(-1));
+    }
+    assertEqual(new Set(seen).size > 2 || seen[0] !== seen[2], true);
 });
 
 const MINUTE = 60e6;
@@ -483,6 +533,16 @@ freshTray('a card in use is not hidden', async () => {
     card.dragEnded(0);
     tray.hideOldCards(later);
     assertEqual(shown(), []);
+});
+freshTray('a card stays while the pointer is on it', async () => {
+    prefs.set_int('hide-after-minutes', 5);
+    tray.preload(1);
+    const [card] = tray.cards;
+    const pointer = card._pointer;
+    card._pointer = {contains_pointer: true};
+    tray.hideOldCards(card.shownAt + 6 * MINUTE);
+    assertEqual(shown().length, 1);
+    card._pointer = pointer;
 });
 freshTray('a card stays while it is being sent', async () => {
     prefs.set_int('hide-after-minutes', 5);

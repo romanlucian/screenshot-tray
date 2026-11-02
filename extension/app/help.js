@@ -13,7 +13,7 @@ const EVERYDAY = [
     ['camera-photo-symbolic', 'Take a screenshot',
         'Use your usual screenshot shortcut (Print, unless you changed it). The screenshot appears in the tray, in the corner of the screen.'],
     ['input-mouse-symbolic', 'Drag a card into any app',
-        'A terminal gets the file\'s path, which Claude Code and Codex understand. A browser, chat or email gets the file. Once an app takes it, the card leaves the tray.'],
+        'A terminal gets the file\'s path, which Claude Code and Codex understand. A browser, chat or email gets the file. Once an app takes it, the card leaves the tray, unless you choose to keep it in Settings.'],
     ['edit-copy-symbolic', 'Hover a card for more',
         'Copy the picture, open it, send it to a server, or close the card with ✕. The file always stays in Pictures › Screenshots.'],
     ['edit-undo-symbolic', 'Bring back',

@@ -73,10 +73,6 @@ const MOVING_KEYS = new Set([
     Gdk.KEY_Tab, Gdk.KEY_ISO_Left_Tab, Gdk.KEY_Return, Gdk.KEY_KP_Enter, Gdk.KEY_space,
     Gdk.KEY_Up, Gdk.KEY_Down, Gdk.KEY_Left, Gdk.KEY_Right,
 ]);
-// Keys that edit text: alone, they mustn't become shortcuts.
-const EDITING_KEYS = new Set([
-    Gdk.KEY_BackSpace, Gdk.KEY_Delete, Gdk.KEY_Insert, Gdk.KEY_Home, Gdk.KEY_End, Gdk.KEY_Page_Up, Gdk.KEY_Page_Down,
-]);
 const STRONG = Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.ALT_MASK | Gdk.ModifierType.SUPER_MASK |
     Gdk.ModifierType.HYPER_MASK | Gdk.ModifierType.META_MASK;
 
@@ -88,6 +84,14 @@ function cleanModifiers(state) {
     if (mods & Gdk.ModifierType.ALT_MASK)
         mods &= ~Gdk.ModifierType.META_MASK;
     return mods;
+}
+
+// Keys with no other job, which can be a shortcut without Ctrl, Alt or Super: function
+// keys, Print and the like, and media keys. Any other key is needed for typing or editing.
+function worksAlone(key) {
+    const isMediaKey = (key & 0xffff0000) === 0x10080000;   // the XF86 keys, such as Launch9
+    return isMediaKey || /^F\d+$/.test(Gdk.keyval_name(key) ?? '') ||
+        [Gdk.KEY_Print, Gdk.KEY_Pause, Gdk.KEY_Scroll_Lock].includes(key);
 }
 
 // True when this key press should go on moving around the window instead of being a shortcut.
@@ -106,8 +110,7 @@ export function readShortcut(keyval, state) {
     if (key === Gdk.KEY_Sys_Req)    // what Alt+Print reports
         key = Gdk.KEY_Print;
     const mods = cleanModifiers(state);
-    const typesOrEdits = Gdk.keyval_to_unicode(key) !== 0 || EDITING_KEYS.has(key) || MOVING_KEYS.has(key);
-    if (typesOrEdits && (mods & STRONG) === 0)
+    if (!worksAlone(key) && (mods & STRONG) === 0)
         return {error: 'That key is needed for typing. Add Ctrl, Alt or Super to it.'};
     return {accelerator: Gtk.accelerator_name(key, mods)};
 }

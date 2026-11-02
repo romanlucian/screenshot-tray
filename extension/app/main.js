@@ -14,7 +14,7 @@ import Gtk from 'gi://Gtk?version=4.0';
 import System from 'system';
 
 import {showAbout, showHelp} from './help.js';
-import {showSettings} from './settings.js';
+import {bringSettingsForward, showSettings} from './settings.js';
 import {Tray} from './tray.js';
 
 const APP_ID = 'com.zincoo.ScreenshotTray';
@@ -32,19 +32,32 @@ function log(message) {
 // top-bar menu): switch the add-on back on, which starts the pinned tray. Returns
 // false when there's nothing to switch on, and the tray then opens as a window.
 function switchAddOnOn() {
-    const call = (method, replyType) => Gio.DBus.session.call_sync(
+    try {
+        const info = addOnInfo();
+        // 2 = switched off, 6 = loaded but never switched on (GNOME's ExtensionState)
+        if (info?.state !== 2 && info?.state !== 6)
+            return false;
+        const [switchedOn] = extensionsCall('EnableExtension', '(b)');
+        return switchedOn;
+    } catch {
+        return false;
+    }
+}
+
+function extensionsCall(method, replyType) {
+    return Gio.DBus.session.call_sync(
         'org.gnome.Shell.Extensions', '/org/gnome/Shell/Extensions', 'org.gnome.Shell.Extensions',
         method, new GLib.Variant('(s)', [ADDON_UUID]), new GLib.VariantType(replyType),
         Gio.DBusCallFlags.NONE, 3000, null).recursiveUnpack();
+}
+
+// What GNOME says about the add-on, or null with no GNOME Shell to ask, e.g. in the
+// README-image sandbox.
+function addOnInfo() {
     try {
-        const [info] = call('GetExtensionInfo', '(a{sv})');
-        // 2 = switched off, 6 = loaded but never switched on (GNOME's ExtensionState)
-        if (info.state !== 2 && info.state !== 6)
-            return false;
-        const [switchedOn] = call('EnableExtension', '(b)');
-        return switchedOn;
+        return extensionsCall('GetExtensionInfo', '(a{sv})')[0];
     } catch {
-        return false;   // no GNOME Shell to ask, e.g. in the README-image sandbox
+        return null;
     }
 }
 
@@ -62,7 +75,7 @@ function trayAppears(waitMs) {
     });
     loop.run();
     Gio.bus_unwatch_name(watch);
-    if (!appeared)
+    if (appeared)
         GLib.source_remove(timer);
     return appeared;
 }
@@ -70,8 +83,9 @@ function trayAppears(waitMs) {
 // "Settings" on the app icon's right-click menu: reaches the tray that is running, after
 // switching the add-on back on if needed. Returns false when there is no tray to reach.
 function askTrayForSettings() {
-    const wasOff = switchAddOnOn();
-    if (!trayAppears(wasOff ? 10000 : 500))
+    // With the add-on on, its tray may be starting: after a login, an unlock or a crash.
+    const trayIsComing = switchAddOnOn() || addOnInfo()?.state === 1;
+    if (!trayAppears(trayIsComing ? 10000 : 500))
         return false;
     Gio.DBusActionGroup.get(Gio.DBus.session, APP_ID, APP_PATH).activate_action('settings', null);
     Gio.DBus.session.flush_sync(null);
@@ -115,7 +129,7 @@ app.connect('startup', () => {
         ['show-recent', () => tray.preload(3)],
         ['clear', () => tray.clear()],
         ['open-folder', () => tray.openFolder()],
-        ['settings', () => showSettings()],
+        ['settings', () => bringSettingsForward()],
         ['help', () => showHelp()],
         ['about', () => showAbout()],
     ]) {

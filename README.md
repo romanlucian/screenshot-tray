@@ -72,14 +72,14 @@ that the tray starts by itself, and its icon appears in the top bar.
 
 ## Inside the app
 
-<img src="docs/inside.png" width="100%" alt="The tray, the Settings window with its list of servers, the top-bar menu, and the About window">
+<img src="docs/inside.png" width="100%" alt="The tray with its gear button, the Settings window on its General tab, the top-bar menu, and the About window">
 
 ## Settings
 
 <img src="docs/settings.png" width="100%" alt="The three Settings tabs: General with the screen corner and card options, Servers with the list of servers, and Shortcuts with GNOME's screenshot keys and the tray's own">
 
 Press the **gear** above your cards, choose *Settings…* in the top-bar menu, or right-click
-the app's icon and choose **Settings**.
+the app's icon and choose **Settings**, which also starts the tray if you had quit it.
 
 - **General:** bottom-left or bottom-right corner, 1 to 5 cards, keeping a card after you drag
   it, and hiding old cards after 5, 15 or 60 minutes. Hidden cards go to *Bring back*, and
