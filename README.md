@@ -65,7 +65,7 @@ that the tray starts by itself, and its icon appears in the top bar.
 | **Top-bar icon** | Reaches the tray even while it's hidden: bring back, clear, open the folder, settings, help, quit. |
 | **Built-in help** | *How to use…* explains everything in plain words. |
 | **Stays out of the way** | It never takes the keyboard, stays out of Alt+Tab and the dock, and is sharp on HiDPI screens. |
-| **Safe** | It never deletes a screenshot, needs no `sudo`, and goes online only when you use *Send to a server*, or set up or test a server in *Settings*. |
+| **Safe** | It never deletes a screenshot, needs no `sudo`, and goes online only when you use *Send to a server*, or set up, test or remove a server in *Settings*. |
 
 ## Inside the app
 
@@ -159,8 +159,8 @@ itself with every login.
 <details>
 <summary><b>Does it send my screenshots anywhere?</b></summary>
 <br>
-Only when you use <i>Send to a server</i>, or set up or test a server in <i>Settings</i>,
-and only to servers you added or turned on, over SSH. Otherwise it never goes online.
+Only when you use <i>Send to a server</i>, or set up, test or remove a server in
+<i>Settings</i>, and only to servers you added or turned on, over SSH. Otherwise it never goes online.
 </details>
 
 <details>

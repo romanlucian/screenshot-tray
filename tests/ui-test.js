@@ -446,6 +446,11 @@ fresh('the changed-ID question uses the spec wording', async () => {
     assertEqual(await reply, false);
     await closed(dialog);
 });
+fresh('closing while the question is open ends the question', async () => {
+    const {dialog, reply} = await askedQuestion('new');
+    await closed(dialog);
+    assertEqual(await Promise.race([reply, pause(300).then(() => 'still waiting')]), false);
+});
 fresh('Settings shows a server added while it is open', async () => {
     const deps = fakeDeps();
     const settings = showSettings(deps);

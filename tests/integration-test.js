@@ -154,6 +154,34 @@ fresh('a different ID in ~/.ssh/known_hosts counts as changed', async () => {
     GLib.file_set_contents(`${home}/.ssh/known_hosts`, `[127.0.0.1]:${port} ${type} ${key}\n`);
     assertEqual((await scanServerId(server('pw'))).state, 'changed');
 });
+async function knownHostsLine(prefix, key) {
+    GLib.mkdir_with_parents(`${home}/.ssh`, 0o700);
+    GLib.file_set_contents(`${home}/.ssh/known_hosts`, `${prefix} [127.0.0.1]:${port} ${key}\n`);
+}
+function otherKey() {
+    GLib.spawn_command_line_sync(`rm -f ${home}/other ${home}/other.pub`);
+    GLib.spawn_command_line_sync(`ssh-keygen -q -t ed25519 -N '' -f ${home}/other`);
+    const [, contents] = GLib.file_get_contents(`${home}/other.pub`);
+    return new TextDecoder().decode(contents).trim().split(' ').slice(0, 2).join(' ');
+}
+fresh('a certificate authority line is not a saved ID', async () => {
+    await knownHostsLine('@cert-authority', otherKey());
+    assertEqual((await scanServerId(server('pw'))).state, 'new');
+});
+fresh('a revoked line for another key is not a saved ID', async () => {
+    await knownHostsLine('@revoked', otherKey());
+    assertEqual((await scanServerId(server('pw'))).state, 'new');
+});
+fresh('an ID marked as revoked stops setup, without asking', async () => {
+    const {keyLines: lines} = await scanServerId(server('pw'));
+    await knownHostsLine('@revoked', lines[0].split(' ').slice(1).join(' '));
+    let asked = 0;
+    const e = await failure(setUpServer(server('pw'), PASSWORD, {askTrust: () => {
+        asked++;
+        return Promise.resolve(true);
+    }}));
+    assertEqual([asked, e.message], [0, "Test server's ID is marked as revoked on this computer, so the app won't connect to it."]);
+});
 
 async function newServerKeys() {
     const before = (await scanServerId(server('pw'))).fingerprint;

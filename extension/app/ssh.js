@@ -127,7 +127,8 @@ export function explainSshError(name, message, kind) {
                 : `${name} isn't trusted yet. Connect once in a terminal (ssh ${name}), then try again.`],
         [/Too many authentication failures/,
             `${name} gave up after too many keys. Name the right key for it in ~/.ssh/config.`],
-        [/Permission denied/,
+        // ssh's own wording: a file the server refuses to write is a different problem.
+        [/Permission denied \(/,
             added ? `${name} no longer accepts this computer's key. Remove it in Settings and add it again.`
                 : `${name} wants a password or another key. The tray only logs in with a saved SSH key.`],
         [/Could not resolve hostname|Name or service not known|nodename nor servname|Temporary failure in name resolution/,
@@ -184,6 +185,9 @@ function entryArguments(target, command) {
 // A request to a server added in Settings. Only the app's own key is offered, without
 // the SSH agent or the user's SSH settings, and it can only do what its key line allows.
 export function addedArguments(server, request) {
+    // With its -i file missing, ssh would quietly offer the user's own keys instead.
+    if (!GLib.file_test(keyPath(), GLib.FileTest.EXISTS))
+        throw new Error(`${server.name} no longer accepts this computer's key. Remove it in Settings and add it again.`);
     return ['ssh', '-F', 'none', ...COMMON, ...idOptions(), '-o', 'BatchMode=yes',
         '-o', 'IdentityAgent=none', '-o', 'IdentitiesOnly=yes', '-o', 'PasswordAuthentication=no',
         '-i', keyPath(), '-p', String(server.port), '-l', server.user, '--', server.address, request];
@@ -226,14 +230,20 @@ export async function ensureKey() {
     ensureConfigDir();
     const key = keyPath();
     const publicPath = `${key}.pub`;
-    if (!GLib.file_test(key, GLib.FileTest.EXISTS) || !GLib.file_test(publicPath, GLib.FileTest.EXISTS)) {
-        for (const path of [key, publicPath])
-            GLib.unlink(path);
+    if (!GLib.file_test(key, GLib.FileTest.EXISTS)) {
+        GLib.unlink(publicPath);
         const keyId = GLib.uuid_string_random().replaceAll('-', '').slice(0, 16);
         const made = await runCommand(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '',
             '-C', `screenshot-tray-${keyId}`, '-f', key], {limitSeconds: LIMITS.scan});
         if (!made.success)
             throw new SetupError(`Couldn't create a key: ${made.stderr.trim()}`);
+    } else if (!GLib.file_test(publicPath, GLib.FileTest.EXISTS)) {
+        // Only the public half is gone: servers already set up must keep working.
+        const made = await runCommand(['ssh-keygen', '-y', '-f', key], {limitSeconds: LIMITS.scan});
+        if (!made.success)
+            throw new SetupError(`Couldn't read the key: ${made.stderr.trim()}`);
+        Gio.File.new_for_path(publicPath).replace_contents(new TextEncoder().encode(made.stdout),
+            null, false, Gio.FileCreateFlags.PRIVATE, null);
     }
     const [, contents] = GLib.file_get_contents(publicPath);
     const [type, blob, comment] = new TextDecoder().decode(contents).trim().split(/\s+/);
@@ -318,14 +328,21 @@ export async function scanServerId(server, cancellable = null) {
         throw new SetupError(explainSshError(server.name, reason, 'added'));
     }
 
+    // Lines marked with @ aren't saved IDs: @cert-authority names who signs IDs, and
+    // @revoked names an ID that must never be accepted.
     const saved = [];
+    const revoked = [];
     for (const file of [knownHostsPath(), GLib.build_filenamev([GLib.get_home_dir(), '.ssh', 'known_hosts'])]) {
         if (!GLib.file_test(file, GLib.FileTest.EXISTS))
             continue;
         const found = await runCommand(['ssh-keygen', '-F', hostSpec(server), '-f', file],
             {limitSeconds: LIMITS.scan, cancellable});
-        saved.push(...hostKeys(found.stdout.split('\n').filter(line => line && !line.startsWith('#'))));
+        const lines = found.stdout.split('\n').filter(line => line && !line.startsWith('#'));
+        saved.push(...hostKeys(lines.filter(line => !line.startsWith('@'))));
+        revoked.push(...hostKeys(lines.filter(line => line.startsWith('@revoked'))));
     }
+    if (hostKeys(scan.keyLines).some(key => revoked.includes(key)))
+        throw new SetupError(`${server.name}'s ID is marked as revoked on this computer, so the app won't connect to it.`);
     const matches = lines => hostKeys(lines).some(key => saved.includes(key));
     let state = 'new';
     if (saved.length > 0) {
@@ -469,7 +486,7 @@ export async function setUpServer(server, password, {onStep = () => {}, askTrust
         const check = await run(addedArguments(server, 'check'));
         if (check.success)
             return;
-        if (/Permission denied/.test(check.stderr)) {
+        if (/Permission denied \(/.test(check.stderr)) {
             throw new SetupError("The key was installed, but the server won't accept it. " +
                 'Ask whoever runs it to check the permissions on your home folder.');
         }

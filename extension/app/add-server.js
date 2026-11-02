@@ -250,7 +250,8 @@ export function showAddServer(parent, deps = realDeps) {
     dialog.connect('closed', () => {
         closed = true;
         cancellable?.cancel();
-        openQuestion?.force_close();
+        // close(), not force_close(): only close() answers the question, so setup can end.
+        openQuestion?.close();
         openQuestion = null;
         passwordRow.text = '';
     });

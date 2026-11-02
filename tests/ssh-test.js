@@ -7,7 +7,8 @@ import GLib from 'gi://GLib';
 
 import {assertEqual, finish, requireMadeUpHome, test} from './lib.js';
 import {
-    checkTarget, cleanRemotePath, explainSshError, keyLine, runCommand, safeRemoteName, sendTo,
+    checkTarget, cleanRemotePath, ensureKey, explainSshError, keyLine, removeServerKey, runCommand,
+    safeRemoteName, sendTo,
 } from '../extension/app/ssh.js';
 
 requireMadeUpHome();
@@ -101,6 +102,7 @@ const MESSAGES = [
     ['client_loop: send disconnect: Broken pipe', 'ssh', 'pi stopped responding.'],
     ['kex_exchange_identification: Connection closed by remote host', 'added', 'pi closed the connection. If you just tried several times, wait a minute and try again.'],
     ['kex_exchange_identification: read: Connection reset by peer', 'ssh', 'pi closed the connection. If you just tried several times, wait a minute and try again.'],
+    ["mkdir: cannot create directory '/home/u/.cache': Permission denied", 'added', "Couldn't send to pi: mkdir: cannot create directory '/home/u/.cache': Permission denied"],
     ['first line\nsomething odd happened', 'ssh', "Couldn't send to pi: something odd happened"],
 ];
 for (const [stderr, kind, message] of MESSAGES) {
@@ -201,6 +203,47 @@ test('the key line is one line, limited, and marked with its id', () => {
     assertEqual(line.includes('\n'), false);
     assertEqual(line.startsWith('restrict,command="'), true);
     assertEqual(line.endsWith('" ssh-ed25519 AAAA screenshot-tray-abc123'), true);
+});
+
+// The app's key -----------------------------------------------------------------------
+
+const keyFile = `${GLib.get_user_config_dir()}/screenshot-tray/key`;
+const addedPi = {kind: 'added', id: 'a@h:22', name: 'Studio Pi', address: '203.0.113.10', user: 'a', port: 22};
+const NO_KEY = "Studio Pi no longer accepts this computer's key. Remove it in Settings and add it again.";
+
+function read(path) {
+    return new TextDecoder().decode(GLib.file_get_contents(path)[1]);
+}
+
+test('with no key file, an added server is never contacted', async () => {
+    GLib.unlink(keyFile);
+    GLib.unlink(`${keyFile}.pub`);
+    GLib.unlink(log);
+    useFakeSsh();
+    const picture = `${home}/a.png`;
+    GLib.file_set_contents(picture, 'x');
+    const messages = [await messageFrom(checkTarget(addedPi)), await messageFrom(sendTo(addedPi, picture))];
+    const removed = await removeServerKey(addedPi);
+    GLib.setenv('PATH', realPath, true);
+    assertEqual(messages, [NO_KEY, NO_KEY]);
+    assertEqual(removed, false);
+    // ssh would otherwise fall back on the user's own keys.
+    assertEqual(GLib.file_test(log, GLib.FileTest.EXISTS), false);
+});
+test('a missing public key is made again, and the private key is kept', async () => {
+    GLib.unlink(keyFile);
+    GLib.unlink(`${keyFile}.pub`);
+    const first = await ensureKey();
+    const privateKey = read(keyFile);
+    GLib.unlink(`${keyFile}.pub`);
+    const second = await ensureKey();
+    assertEqual([read(keyFile) === privateKey, second.publicKey, second.keyId], [true, first.publicKey, first.keyId]);
+});
+test('a missing private key gives a whole new pair', async () => {
+    const first = await ensureKey();
+    GLib.unlink(keyFile);
+    const second = await ensureKey();
+    assertEqual([second.publicKey === first.publicKey, second.keyId === first.keyId], [false, false]);
 });
 
 await finish();
