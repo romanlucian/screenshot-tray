@@ -61,32 +61,51 @@ that the tray starts by itself, and its icon appears in the top bar.
 | **Drag into any app** | A terminal gets the file's path; a browser, chat or email gets the file. |
 | **Tidies itself** | A card leaves once an app accepts it. **Clear all** empties the tray, and it hides when empty. |
 | **Bring back** | Closed a card by mistake? Bring it back from the tray or the top-bar menu. |
-| **Send to a server** | For Claude Code or Codex on another computer: uploads the screenshot over SSH and copies its path there. |
-| **Top-bar icon** | Reaches the tray even while it's hidden: bring back, clear, open the folder, help, quit. |
-| **Built-in help** | *How to use…* explains everything in plain words, and tests your servers. |
+| **Send to a server** | For Claude Code or Codex on another computer: set up a server in *Settings*, then one click uploads the screenshot over SSH and copies its path there. |
+| **Top-bar icon** | Reaches the tray even while it's hidden: bring back, clear, open the folder, settings, help, quit. |
+| **Built-in help** | *How to use…* explains everything in plain words. |
 | **Stays out of the way** | It never takes the keyboard, stays out of Alt+Tab and the dock, and is sharp on HiDPI screens. |
-| **Safe** | It never deletes a screenshot, needs no `sudo`, and goes online only when you press *Send to a server*. |
+| **Safe** | It never deletes a screenshot, needs no `sudo`, and goes online only when you use *Send to a server*, or set up or test a server in *Settings*. |
 
 ## Inside the app
 
-<img src="docs/inside.png" width="100%" alt="The tray, the How to use window with its server list, the top-bar menu, and the About window">
+<img src="docs/inside.png" width="100%" alt="The tray, the Settings window with its list of servers, the top-bar menu, and the About window">
 
 ## Sending to a server
+
+<img src="docs/add-server.png" width="100%" alt="The Add a server form with address, username and password, beside its finished checklist: found the server, logged in, installed a secure key, sending works">
 
 The server button on each card is for Claude Code or Codex running on another computer
 over SSH. It uploads the screenshot to that computer and copies its path there: click in
 that terminal and press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd>.
 
-It sends to the servers on the `Host` lines of your `~/.ssh/config` (*How to use… → Edit
-the server list* opens it), and it logs in the way scripts do, without ever asking for a
-password. So it works with a **Linux or Mac server you reach with an SSH key**, such as a
-cloud machine, a home server or a Raspberry Pi.
+**To set one up:** top-bar icon → *Settings…* → *Add a server…*. Enter the address, your
+username and your password, then press **Connect**. It works with a **Linux or Mac
+server**, such as a cloud machine, a home server or a Raspberry Pi.
 
-- **Connect once by hand first** (`ssh yourserver`), so your computer knows the server.
-- **Password-only logins, logins that ask for a code (2FA) and Windows servers don't
-  work.** If a send fails, the card says why in a plain sentence.
+- **Your password** is used once to set up a key, then forgotten. It is never saved. If
+  this computer already logs in to the server with a key, leave the password empty.
+- **The key is limited.** On the server it can only drop screenshots into one private
+  folder, `~/.cache/screenshot-tray/inbox`, or remove itself. It can't open a shell.
+- **Servers already in your `~/.ssh/config`** appear in *Settings* with a switch. They start
+  off, and the app never changes your SSH files.
+- **Logins that ask for a code (2FA) and Windows servers don't work.** If a step fails, the
+  app says why in a plain sentence.
 - **If Claude Code runs inside a container** on the server, share
   `~/.cache/screenshot-tray/inbox` with the container, or it won't see the file.
+
+**Worth knowing:**
+
+- **The first connection is taken on trust**, as with SSH itself. The app shows the server's
+  ID and asks before continuing, but most people can't check an ID by hand. If someone were
+  intercepting that very first connection and you accepted, your password would go to them.
+- **Screenshots stay on the server** unencrypted until you delete them, private to your
+  account. Anyone with admin rights there can read them, so send sensitive screens only to
+  servers you trust. They travel encrypted.
+- **Servers switched on from your SSH settings use your full login**, not the limited key.
+- **The key on this computer has no passphrase**, because it must work without asking. If
+  someone copied it, they could fill the server's disk with files in that folder, but they
+  would already need access to your account here.
 
 ## What it adds to your computer
 
@@ -99,7 +118,9 @@ Everything goes in your own home folder. It needs no `sudo` and changes no syste
 | The app's entry in the app list | `~/.local/share/applications/com.zincoo.ScreenshotTray.desktop` |
 | The app's icon, as a link to `data/` | `~/.local/share/icons/hicolor/scalable/apps/com.zincoo.ScreenshotTray.svg` |
 | The tray's note of which cards are showing, and which left | `~/.cache/screenshot-tray/cards.json` |
+| The list of servers, the app's own key, and the server IDs you trusted | `~/.config/screenshot-tray/` (private to your account) |
 | On a server you send to: the screenshots you sent | `~/.cache/screenshot-tray/inbox/` (private to your account) |
+| On a server you added: one line for the limited key | `~/.ssh/authorized_keys` |
 
 ## Uninstall
 
@@ -107,8 +128,10 @@ Everything goes in your own home folder. It needs no `sudo` and changes no syste
 ./uninstall.sh
 ```
 
-This removes everything in the table above from this computer. Screenshots you sent stay
-in that server's inbox folder, and your screenshots are never touched.
+This removes everything in the table above from this computer, and your screenshots are
+never touched. It can't reach your servers, so remove them in *Settings* first: that also
+takes the key's line off each one. A line left behind is useless without this computer's
+key. Screenshots you sent stay in that server's inbox folder.
 
 ## Questions
 
@@ -136,8 +159,8 @@ itself with every login.
 <details>
 <summary><b>Does it send my screenshots anywhere?</b></summary>
 <br>
-Only when you press <i>Send to a server</i>, and then only to your own server over SSH.
-Otherwise it never goes online.
+Only when you use <i>Send to a server</i>, or set up or test a server in <i>Settings</i>,
+and only to servers you added or turned on, over SSH. Otherwise it never goes online.
 </details>
 
 <details>
@@ -168,10 +191,14 @@ flowchart TB
     end
     subgraph app ["The tray app (GJS + GTK 4)"]
         Y["<b>Tray</b> · extension/app/main.js<br/>watches the Screenshots folder, shows the cards,<br/>handles drag and drop"]
-        Z["<b>Servers</b> · extension/app/servers.js<br/><b>Help and About</b> · extension/app/help.js"]
+        S["<b>Settings</b> · extension/app/settings.js, add-server.js<br/><b>Help and About</b> · extension/app/help.js"]
+        Z["<b>Server list</b> · extension/app/servers.js, no network<br/><b>Every SSH call</b> · extension/app/ssh.js, askpass.sh"]
     end
     X -- "launches as a trusted window" --> Y
     X -- "menu actions over D-Bus" --> Y
+    Y --> S
+    Y --> Z
+    S --> Z
 ```
 
 - The add-on starts the tray the same way Ubuntu's own desktop icons start their window
@@ -184,8 +211,10 @@ flowchart TB
   `tools/render-app-parts.sh` draws off-screen using the made-up demo screenshots in
   `tools/demo/` and a made-up server list. No real screenshot or setting of yours is ever
   published.
-- About 1,100 lines of JavaScript. Built for GNOME 50: a newer GNOME may need the add-on
-  updated.
+- **Tests:** `tests/run.sh` needs nothing special, `tests/ui.sh` presses the real windows on
+  an invisible display, and `tests/integration.sh` sets up and sends to real SSH servers in
+  throwaway Docker containers, on 127.0.0.1 only. All of them use a made-up home folder.
+- Built for GNOME 50: a newer GNOME may need the add-on updated.
 
 </details>
 
