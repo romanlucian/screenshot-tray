@@ -444,6 +444,90 @@ test('with a question open in Settings, the cards still work', async () => {
         await closeSettings();
     }
 });
+// Chromium (Chrome, and VS Code, which is built on it) takes drops its own way.
+const CHROME = GLib.find_program_in_path('google-chrome');
+
+async function startChrome() {
+    await until('an earlier Chrome to be gone', () => !windows().some(window => window.title?.startsWith('Chrome drop') || window.title?.startsWith('dropped:')));
+    const page = `${WORK}/drop.html`;
+    GLib.file_set_contents(page, '<title>Chrome drop</title><body style="height:100vh;margin:0" ' +
+        'ondragover="event.preventDefault()" ondrop="event.preventDefault(); document.title = ' +
+        "'dropped: ' + ([...event.dataTransfer.files].map(file => file.name).join(',') || " +
+        "event.dataTransfer.getData('text/uri-list') || 'nothing')\">Drop here</body>");
+    const chrome = Gio.Subprocess.new([CHROME, '--ozone-platform=wayland', '--no-sandbox', '--no-first-run',
+        '--disable-gpu', `--user-data-dir=${WORK}/chrome`, `--app=file://${page}`], Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE);
+    await until('Chrome', () => windowTitled('Chrome drop'), 40);
+    probe('trayProbe.place("Chrome drop", 970, 100, 300, 400)');   // beside Settings, not under it
+    await pause(800);
+    return chrome;
+}
+
+async function dragCardToChrome() {
+    const card = oneCard();
+    const target = windowTitled('Chrome drop');
+    probe(`trayProbe.moveTo(${card.centreX - 20}, ${card.centreY})`);
+    await pause(300);
+    probe(`trayProbe.drag(${card.centreX}, ${card.centreY}, ${target.x + target.width / 2}, ${target.y + target.height / 2})`);
+    let dropped = '';
+    try {
+        await until('Chrome to get the drop', () => {
+            dropped = windows().find(window => window.title?.startsWith('dropped:'))?.title ?? '';
+            return dropped !== '';
+        }, 8);
+    } catch (e) {
+        savePicture('chrome-drop-failed');
+        throw e;
+    }
+    return dropped;
+}
+
+if (CHROME) {
+    test('a drag into Chrome works, with Settings closed and with a question open', async () => {
+        await until('the tray window', () => trayWindow());
+        let chrome = await startChrome();
+        try {
+            const dropped = await dragCardToChrome();
+            assertEqual([dropped, dropped.includes('shot-1.png')], [dropped, true]);
+        } finally {
+            chrome.force_exit();
+        }
+        if (savedCards() === 0) {
+            askTray('restore-last');
+            await until('the card back', () => savedCards() === 1);
+        }
+        await clickGear();
+        await settingsInFront('gear, before the Chrome drop');
+        await pause(400);
+        const win = settingsWindow();
+        probe(`trayProbe.moveTo(${win.x + 443}, ${win.y + 22})`);   // the Shortcuts tab
+        await pause(150);
+        probe('trayProbe.click()');
+        await pause(500);
+        probe(`trayProbe.moveTo(${win.x + 200}, ${win.y + 397})`);  // a row: its question opens
+        await pause(150);
+        probe('trayProbe.click()');
+        await pause(600);
+        chrome = await startChrome();
+        try {
+            savePicture('chrome-question-open');
+            const dropped = await dragCardToChrome();
+            assertEqual([dropped, dropped.includes('shot-1.png')], [dropped, true]);
+        } finally {
+            chrome.force_exit();
+            if (savedCards() === 0) {
+                askTray('restore-last');
+                await until('the card back', () => savedCards() === 1);
+            }
+            probe(`trayProbe.moveTo(${win.x + 236}, ${win.y + 377})`);   // the question's Cancel
+            await pause(150);
+            probe('trayProbe.click()');
+            await pause(400);
+            probe('trayProbe.focus("Settings")');
+            await pause(300);
+            await closeSettings();
+        }
+    });
+}
 test('the tray is pinned bottom-left, above other windows, on every workspace', async () => {
     takeScreenshot(2);
     takeScreenshot(3);
