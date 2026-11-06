@@ -56,7 +56,7 @@ export function showAbout() {
         application_name: 'Screenshot Tray',
         application_icon: 'com.zincoo.ScreenshotTray',
         developer_name: 'Zincoo · Lucian Roman',
-        version: '1.2',
+        version: '1.2.1',
         website: 'https://zincoo.com',
         comments: 'Your latest screenshots float in the corner of the screen, ready to drag into any app.',
         copyright: '© 2026 Lucian Roman, Zincoo',
