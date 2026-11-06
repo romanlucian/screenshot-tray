@@ -71,7 +71,7 @@ PY
         XDG_DATA_HOME="$WORK/home/.local/share" XDG_CACHE_HOME="$WORK/home/.cache" \
         XDG_DATA_DIRS="$WORK/data:/usr/local/share:/usr/share" \
         GSETTINGS_BACKEND=keyfile GSK_RENDERER=cairo PATH="$HERE/tests/fakes:$PATH" \
-        FAKE_SSH_LOG="$WORK/ssh.log" FAKE_SSH_OUTPUT="" DROP_LOG="$WORK/dropped.txt" WAYLAND_DISPLAY=wayland-0 GDK_BACKEND=wayland \
+        FAKE_SSH_LOG="$WORK/ssh.log" FAKE_SSH_OUTPUT="/home/me/.cache/screenshot-tray/inbox/shot-1.png" DROP_LOG="$WORK/dropped.txt" WAYLAND_DISPLAY=wayland-0 GDK_BACKEND=wayland \
         SCREENSHOT_TRAY_DIR="$WORK/shots" SCREENSHOT_TRAY_STATE="$WORK/cards.json" \
         TRAY_TEST_MONITOR="${TRAY_TEST_MONITOR:-1280x800}" TRAY_TEST_SCALE="${TRAY_TEST_SCALE:-1}" \
         TRAY_TEST_MODE="${TRAY_TEST_MODE:-user}" \

@@ -287,6 +287,11 @@ test('a real click on a card\'s server button sends the picture', async () => {
         [original.length, GLib.compute_checksum_for_bytes(GLib.ChecksumType.SHA256, original)]);
     const [, args] = GLib.file_get_contents(`${WORK}/ssh.log`);
     assertEqual(new TextDecoder().decode(args).includes('build-box'), true);
+    // The path on the server is now on the clipboard, ready to paste there.
+    await until('the path on the clipboard', () => {
+        probe('trayProbe.readClipboard()');
+        return probe('trayProbe.clipboard') === GLib.getenv('FAKE_SSH_OUTPUT');
+    }, 5);
     setSshHostOn('build-box', false);
     probe('trayProbe.moveTo(640, 100)');
     await pause(200);

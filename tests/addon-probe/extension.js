@@ -6,6 +6,7 @@ import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Shell from 'gi://Shell';
+import St from 'gi://St';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -22,6 +23,11 @@ export default class Probe extends Extension {
         globalThis.trayProbe = {
             ready: () => !Main.layoutManager._startingUp && Main.sessionMode.currentMode !== undefined,
             leaveOverview: () => Main.overview.hide(),
+            // The clipboard as an app pasting would see it: read it, then ask for the text.
+            readClipboard: () => St.Clipboard.get_default().get_text(St.ClipboardType.CLIPBOARD, (_clipboard, text) => {
+                globalThis.trayProbe.clipboard = text;
+            }),
+            clipboard: null,
             hasKeybinding: name => Boolean(Main.wm._allowedKeybindings[name]),
             notices: () => Main.messageTray.getSources().flatMap(source => source.notifications.map(notice => notice.title)),
             place: (title, x, y, width, height) => global.get_window_actors()

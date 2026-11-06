@@ -600,6 +600,50 @@ freshTray('the right corner lines the cards and buttons up on the right', async 
     assertEqual(tray.cards.every(card => card.widget.halign === Gtk.Align.START), true);
 });
 
+// A new screenshot -----------------------------------------------------------------------
+
+freshTray('a screenshot saved as GNOME saves it shows within a second', async () => {
+    // GNOME Shell creates the file and writes the whole picture at once, but closes it only
+    // when its memory is tidied up, seconds later. Keep this one open the same way.
+    tray.watch();
+    const [, png] = GLib.file_get_contents(`${SHOTS}/shot-1.png`);
+    const file = Gio.File.new_for_path(`${SHOTS}/Screenshot From 2026-11-07 00-00-00.png`);
+    const started = GLib.get_monotonic_time();
+    const stream = file.create(Gio.FileCreateFlags.NONE, null);
+    stream.write_bytes(new GLib.Bytes(png), null);
+    try {
+        for (let i = 0; i < 40 && !shown().includes(file.get_basename()); i++)
+            await pause(50);
+        const tookMs = Math.round((GLib.get_monotonic_time() - started) / 1000);
+        assertEqual([shown().includes(file.get_basename()), tookMs < 1000], [true, true]);
+    } finally {
+        stream.close(null);
+        file.delete(null);
+        await pause(200);
+    }
+});
+
+freshTray('a picture caught half written waits until it is whole', async () => {
+    tray.watch();
+    const [, png] = GLib.file_get_contents(`${SHOTS}/shot-2.png`);
+    const half = Math.floor(png.length / 2);
+    const file = Gio.File.new_for_path(`${SHOTS}/Screenshot From 2026-11-07 00-00-01.png`);
+    const stream = file.create(Gio.FileCreateFlags.NONE, null);
+    stream.write_bytes(new GLib.Bytes(png.slice(0, half)), null);
+    try {
+        await pause(700);
+        assertEqual(shown().includes(file.get_basename()), false);
+        stream.write_bytes(new GLib.Bytes(png.slice(half)), null);
+        for (let i = 0; i < 40 && !shown().includes(file.get_basename()); i++)
+            await pause(50);
+        assertEqual(shown().includes(file.get_basename()), true);
+    } finally {
+        stream.close(null);
+        file.delete(null);
+        await pause(200);
+    }
+});
+
 // Right-click the app icon › Settings ------------------------------------------------
 
 test('main.js --settings asks the running tray to open Settings, and ends', async () => {

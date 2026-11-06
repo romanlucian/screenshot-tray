@@ -266,7 +266,8 @@ class Card {
         this._say(`Sending to ${target.name}…`, 30000);
         try {
             const remotePath = await sendTo(target, this.path);
-            Gdk.Display.get_default().get_clipboard().set_text(remotePath);
+            // set_text() doesn't exist in GJS with GTK 4.22, so hand over the text as content.
+            Gdk.Display.get_default().get_clipboard().set_content(Gdk.ContentProvider.new_for_value(remotePath));
             log(`sent ${GLib.path_get_basename(this.path)} to ${target.name}: ${remotePath}`);
             this._say(`On ${target.name}. Its path is copied: paste it there (Ctrl+Shift+V).`, 4000);
         } catch (e) {
@@ -455,6 +456,11 @@ export class Tray {
         this._monitor = folder.monitor_directory(Gio.FileMonitorFlags.WATCH_MOVES, null);
         this._monitor.connect('changed', (_monitor, file, otherFile, event) => {
             switch (event) {
+            // GNOME Shell writes a screenshot in one go but closes the file only when its
+            // memory is tidied up, so "done" can come seconds later. Try as soon as the file
+            // is created or written: one that isn't complete yet is tried again shortly.
+            case Gio.FileMonitorEvent.CREATED:
+            case Gio.FileMonitorEvent.CHANGED:
             case Gio.FileMonitorEvent.CHANGES_DONE_HINT:
             case Gio.FileMonitorEvent.MOVED_IN:
                 this._consider(file.get_path());
