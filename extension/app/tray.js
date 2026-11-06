@@ -165,9 +165,11 @@ class Card {
         this._sendButton.update(sendTargets());
         actions.append(this._sendButton.widget);
 
-        // A short message across the top of the card, e.g. "Sending…" or "Path copied".
+        // A short message across the top of the card, e.g. "Sending…" or "Path copied". It lets
+        // clicks and drags through to the card under it.
         this._status = new Gtk.Label({
             visible: false,
+            can_target: false,
             wrap: true,
             wrap_mode: Pango.WrapMode.WORD_CHAR,
             lines: 3,
@@ -198,6 +200,7 @@ class Card {
     }
 
     dragBegan() {
+        log(`drag of ${GLib.path_get_basename(this.path)} began`);
         this._dragRefused = false;
         this._dragging = true;
         this.widget.add_css_class('dragging');

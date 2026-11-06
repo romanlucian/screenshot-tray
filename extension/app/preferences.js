@@ -86,12 +86,27 @@ function cleanModifiers(state) {
     return mods;
 }
 
-// Keys with no other job, which can be a shortcut without Ctrl, Alt or Super: function
-// keys, Print and the like, and media keys. Any other key is needed for typing or editing.
-function worksAlone(key) {
-    const isMediaKey = (key & 0xffff0000) === 0x10080000;   // the XF86 keys, such as Launch9
-    return isMediaKey || /^F\d+$/.test(Gdk.keyval_name(key) ?? '') ||
-        [Gdk.KEY_Print, Gdk.KEY_Pause, Gdk.KEY_Scroll_Lock].includes(key);
+// GNOME Settings' own rule (gnome-control-center, keyboard shortcuts), so that what it
+// takes is taken here too. With no modifier or only Shift, it refuses letters and digits
+// of every alphabet, the space bar alone, and the keys that move around. Every other key
+// is allowed, also alone or with Shift, such as Shift+± or Delete.
+const LETTERS_AND_DIGITS = [
+    [Gdk.KEY_a, Gdk.KEY_z], [Gdk.KEY_A, Gdk.KEY_Z], [Gdk.KEY_0, Gdk.KEY_9],
+    [Gdk.KEY_kana_fullstop, Gdk.KEY_semivoicedsound], [Gdk.KEY_Arabic_comma, Gdk.KEY_Arabic_sukun],
+    [Gdk.KEY_Serbian_dje, Gdk.KEY_Cyrillic_HARDSIGN], [Gdk.KEY_Greek_ALPHAaccent, Gdk.KEY_Greek_omega],
+    [Gdk.KEY_hebrew_doublelowline, Gdk.KEY_hebrew_taf], [Gdk.KEY_Thai_kokai, Gdk.KEY_Thai_lekkao],
+    [Gdk.KEY_Hangul_Kiyeog, Gdk.KEY_Hangul_J_YeorinHieuh],
+];
+const REFUSED_WITHOUT_MODIFIER = new Set([
+    Gdk.KEY_Home, Gdk.KEY_Left, Gdk.KEY_Up, Gdk.KEY_Right, Gdk.KEY_Down, Gdk.KEY_Page_Up, Gdk.KEY_Page_Down,
+    Gdk.KEY_End, Gdk.KEY_Tab, Gdk.KEY_KP_Enter, Gdk.KEY_Return, Gdk.KEY_Mode_switch,
+]);
+
+function gnomeRefuses(key, mods) {
+    if (mods !== 0 && mods !== Gdk.ModifierType.SHIFT_MASK)
+        return false;
+    return LETTERS_AND_DIGITS.some(([first, last]) => key >= first && key <= last) ||
+        (key === Gdk.KEY_space && mods === 0) || REFUSED_WITHOUT_MODIFIER.has(key);
 }
 
 // True when this key press should go on moving around the window instead of being a shortcut.
@@ -99,8 +114,8 @@ export function passesThrough(keyval, state) {
     return MOVING_KEYS.has(keyval) && (cleanModifiers(state) & STRONG) === 0;
 }
 
-// Reads a key press. Returns null to keep waiting (only a modifier so far), {error} when
-// it can't be a shortcut, or {accelerator}.
+// Reads a key press. Returns null to keep waiting (only a modifier so far), {clear} for
+// Backspace alone, as in GNOME Settings, {error} when it can't be a shortcut, or {accelerator}.
 export function readShortcut(keyval, state) {
     if (MODIFIER_KEYS.has(keyval))
         return null;
@@ -110,7 +125,9 @@ export function readShortcut(keyval, state) {
     if (key === Gdk.KEY_Sys_Req)    // what Alt+Print reports
         key = Gdk.KEY_Print;
     const mods = cleanModifiers(state);
-    if (!worksAlone(key) && (mods & STRONG) === 0)
+    if (key === Gdk.KEY_BackSpace && mods === 0)
+        return {clear: true};
+    if (gnomeRefuses(key, mods))
         return {error: 'That key is needed for typing. Add Ctrl, Alt or Super to it.'};
     return {accelerator: Gtk.accelerator_name(key, mods)};
 }

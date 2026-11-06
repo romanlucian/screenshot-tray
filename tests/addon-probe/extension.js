@@ -66,6 +66,21 @@ export default class Probe extends Extension {
                 keys.reverse().forEach(key => keyboard.notify_keyval(now(), key, Clutter.KeyState.RELEASED));
             },
             moveTo: (x, y) => mouse.notify_absolute_motion(now(), x, y),
+            // Presses at one place, moves in small steps to another, and lets go there.
+            drag: (fromX, fromY, toX, toY) => {
+                mouse.notify_absolute_motion(now(), fromX, fromY);
+                mouse.notify_button(now(), Clutter.BUTTON_PRIMARY, Clutter.ButtonState.PRESSED);
+                let step = 0;
+                GLib.timeout_add(GLib.PRIORITY_DEFAULT, 40, () => {
+                    step++;
+                    const part = Math.min(step / 25, 1);
+                    mouse.notify_absolute_motion(now(), fromX + (toX - fromX) * part, fromY + (toY - fromY) * part);
+                    if (step < 30)
+                        return GLib.SOURCE_CONTINUE;
+                    mouse.notify_button(now(), Clutter.BUTTON_PRIMARY, Clutter.ButtonState.RELEASED);
+                    return GLib.SOURCE_REMOVE;
+                });
+            },
             click: () => {
                 mouse.notify_button(now(), Clutter.BUTTON_PRIMARY, Clutter.ButtonState.PRESSED);
                 GLib.timeout_add(GLib.PRIORITY_DEFAULT, 60, () => {

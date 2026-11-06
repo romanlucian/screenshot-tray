@@ -14,7 +14,7 @@ import {assertEqual, finish, requireMadeUpHome, requireMemorySettings, test} fro
 import {button, row, rows, walk} from './widgets.js';
 import {showHelp} from '../extension/app/help.js';
 import {
-    ADDON_VERSION, gnomeShortcuts, passesThrough, readShortcut, traySettings,
+    ADDON_VERSION, gnomeShortcuts, passesThrough, readShortcut, sameShortcut, traySettings,
 } from '../extension/app/preferences.js';
 import {bringSettingsForward, showSettings} from '../extension/app/settings.js';
 import {Tray} from '../extension/app/tray.js';
@@ -142,15 +142,31 @@ test('Print and F5 work alone', () => {
 test('Alt+Print stays Alt+Print, not SysRq', () => {
     assertEqual(parsed(readShortcut(Gdk.KEY_Sys_Req, ALT).accelerator), ['Print', ALT]);
 });
-test('a letter alone is refused, because it would break typing', () => {
+test('a letter or digit alone, or with only Shift, is refused, as in GNOME Settings', () => {
     assertEqual(Boolean(readShortcut(Gdk.KEY_b, 0).error), true);
     assertEqual(Boolean(readShortcut(Gdk.KEY_B, SHIFT).error), true);
     assertEqual(Boolean(readShortcut(Gdk.KEY_4, 0).error), true);
-    assertEqual(Boolean(readShortcut(Gdk.KEY_Delete, 0).error), true);
+    assertEqual(Boolean(readShortcut(Gdk.KEY_dollar, SHIFT).error), false);    // Shift+4 types $
+    assertEqual(Boolean(readShortcut(Gdk.KEY_Cyrillic_a, 0).error), true);
+    assertEqual(Boolean(readShortcut(Gdk.KEY_Greek_alpha, SHIFT).error), true);
 });
-test('numpad keys and accent keys alone are refused too', () => {
-    for (const key of [Gdk.KEY_KP_Delete, Gdk.KEY_KP_Home, Gdk.KEY_KP_Up, Gdk.KEY_dead_acute, Gdk.KEY_Menu])
+test('Shift plus a symbol key is a shortcut, as GNOME Settings allows', () => {
+    assertEqual(readShortcut(Gdk.KEY_plusminus, SHIFT).accelerator, '<Shift>plusminus');
+    assertEqual(sameShortcut(readShortcut(Gdk.KEY_plusminus, SHIFT).accelerator, '<Shift>plusminus'), true);
+});
+test('a symbol key or Delete works alone, as GNOME Settings allows', () => {
+    for (const key of [Gdk.KEY_plusminus, Gdk.KEY_section, Gdk.KEY_Delete, Gdk.KEY_Menu])
+        assertEqual([Gdk.keyval_name(key), Boolean(readShortcut(key, 0).accelerator)], [Gdk.keyval_name(key), true]);
+});
+test('the space bar, arrows, Home, End, Page Up and Down, Tab and Return are refused alone', () => {
+    for (const key of [Gdk.KEY_space, Gdk.KEY_Left, Gdk.KEY_Home, Gdk.KEY_End, Gdk.KEY_Page_Down, Gdk.KEY_Tab, Gdk.KEY_Return, Gdk.KEY_KP_Enter])
         assertEqual([Gdk.keyval_name(key), Boolean(readShortcut(key, 0).error)], [Gdk.keyval_name(key), true]);
+    assertEqual(Boolean(readShortcut(Gdk.KEY_space, SHIFT).accelerator), true);
+    assertEqual(Boolean(readShortcut(Gdk.KEY_Left, SUPER).accelerator), true);
+});
+test('Backspace alone clears the shortcut, as in GNOME Settings', () => {
+    assertEqual(readShortcut(Gdk.KEY_BackSpace, 0), {clear: true});
+    assertEqual(Boolean(readShortcut(Gdk.KEY_BackSpace, CTRL).accelerator), true);
 });
 test('a media key works alone', () => {
     assertEqual(parsed(readShortcut(Gdk.KEY_Launch9, 0).accelerator), [Gdk.keyval_name(Gdk.KEY_Launch9), 0]);
@@ -314,6 +330,23 @@ fresh('pressing keys changes GNOME\'s own shortcut', async () => {
     press(question, Gdk.KEY_F9);
     await pause(50);
     assertEqual(gnome.get_strv('screenshot'), ['F9']);
+    await closed(dialog);
+});
+fresh('Shift plus a symbol key is saved, as in GNOME Settings', async () => {
+    const dialog = open('shortcuts');
+    const question = await recording(dialog, 'Open the screenshot tool');
+    press(question, Gdk.KEY_plusminus, SHIFT);
+    await pause(50);
+    assertEqual([gnome.get_strv('show-screenshot-ui'), openQuestion()], [['<Shift>plusminus'], null]);
+    await closed(dialog);
+});
+fresh('Backspace in the question clears the shortcut', async () => {
+    prefs.set_strv('shortcut-clear', ['<Super>c']);
+    const dialog = open('shortcuts');
+    const question = await recording(dialog, 'Clear the tray');
+    press(question, Gdk.KEY_BackSpace);
+    await pause(50);
+    assertEqual([prefs.get_strv('shortcut-clear'), openQuestion()], [[], null]);
     await closed(dialog);
 });
 fresh('a letter alone is refused, and the question stays open and says why', async () => {

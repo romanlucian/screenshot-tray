@@ -15,7 +15,7 @@ import {
 } from './preferences.js';
 
 const PROMPT = 'Press the keys you want. A combination GNOME already uses will just do its ' +
-    'usual job, so choose another one. Esc cancels.';
+    'usual job, so choose another one. Esc cancels, Backspace clears it.';
 
 function current(settings, key) {
     return settings.get_strv(key)[0] ?? '';
@@ -51,7 +51,10 @@ function askForKeys(dialog, title, key, place, places) {
         if (passesThrough(keyval, state))
             return false;
         const pressed = readShortcut(keyval, state);
-        if (pressed?.error) {
+        if (pressed?.clear) {
+            settings.set_strv(key, []);
+            question.close();
+        } else if (pressed?.error) {
             question.body = pressed.error;
         } else if (pressed) {
             const other = usedBy(pressed.accelerator, key, places);

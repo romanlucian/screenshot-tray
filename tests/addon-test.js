@@ -146,7 +146,35 @@ function shortcut(key, accelerator) {
     Gio.Settings.sync();
 }
 
+// Like Settings › Displays › Scale, for TRAY_TEST_SCALE.
+function setScale(scale) {
+    const call = (method, args, reply) => Gio.DBus.session.call_sync('org.gnome.Mutter.DisplayConfig',
+        '/org/gnome/Mutter/DisplayConfig', 'org.gnome.Mutter.DisplayConfig', method, args,
+        reply ? new GLib.VariantType(reply) : null, Gio.DBusCallFlags.NONE, 10000, null);
+    const [serial, monitors] = call('GetCurrentState', null, '(ua((ssss)a(siiddada{sv})a{sv})a(iiduba(ssss)a{sv})a{sv})').deepUnpack();
+    const [[connector], modes] = monitors[0];
+    const mode = modes.find(([, , , , , , props]) => props['is-current']?.deepUnpack()) ?? modes[0];
+    const scales = mode[5];
+    const nearest = scales.reduce((best, value) => Math.abs(value - scale) < Math.abs(best - scale) ? value : best);
+    call('ApplyMonitorsConfig', new GLib.Variant('(uua(iiduba(ssa{sv}))a{sv})', [serial, 1,
+        [[0, 0, nearest, 0, true, [[connector, mode[0], {}]]]], {'layout-mode': new GLib.Variant('u', 1)}]), null);
+    return nearest;
+}
+
 test('the add-on loads at login with no error, at the version the app asks for', async () => {
+    const scale = Number(GLib.getenv('TRAY_TEST_SCALE') ?? '1');
+    if (scale !== 1) {
+        let applied = 0;
+        await until('the display settings to accept a scale', () => {
+            try {
+                applied = setScale(scale);
+                return true;
+            } catch {
+                return false;
+            }
+        }, 60);
+        print(`      screen scale set to ${applied}`);
+    }
     await until('the add-on to be running', () => addOnInfo().state === 1, 60);
     const info = addOnInfo();
     assertEqual([info.version, info.error ?? ''], [2, '']);
@@ -263,6 +291,82 @@ test('a real click on a card\'s server button sends the picture', async () => {
     probe('trayProbe.moveTo(640, 100)');
     await pause(200);
 });
+// Where things are on the one card: the tray shows a single 220×110 card under the gear.
+function oneCard() {
+    const tray = trayWindow();
+    const right = tray.x + tray.width - 14;
+    const bottom = tray.y + tray.height - 14;
+    return {centreX: right - (tray.width - 28) / 2, centreY: bottom - 55, closeX: right - 6 - 15, closeY: bottom - 110 + 6 + 15};
+}
+
+async function startDropApp() {
+    GLib.unlink(`${WORK}/dropped.txt`);
+    const dropApp = Gio.Subprocess.new(['gjs', '-m', `${TEST_DIR}/addon-drop-app.js`], Gio.SubprocessFlags.NONE);
+    await until('the drop app', () => windowTitled('Drop app'));
+    probe('trayProbe.place("Drop app", 600, 150, 500, 400)');
+    await pause(500);
+    return dropApp;
+}
+
+async function dragCardToDropApp() {
+    const card = oneCard();
+    const target = windowTitled('Drop app');
+    probe(`trayProbe.drag(${card.centreX}, ${card.centreY}, ${target.x + 250}, ${target.y + 200})`);
+    await until('the drop app to get the file', () => GLib.file_test(`${WORK}/dropped.txt`, GLib.FileTest.EXISTS), 8);
+    const [, dropped] = GLib.file_get_contents(`${WORK}/dropped.txt`);
+    return new TextDecoder().decode(dropped).trim();
+}
+
+test('a real drag of a card into another app hands it the file, and the card leaves', async () => {
+    const dropApp = await startDropApp();
+    try {
+        assertEqual(await dragCardToDropApp(), `${GLib.getenv('SCREENSHOT_TRAY_DIR')}/shot-1.png`);
+        await until('the card to leave', () => savedCards() === 0, 5);
+    } finally {
+        savePicture('after-drag');
+        dropApp.force_exit();
+        askTray('restore-last');
+        await until('the card back', () => savedCards() === 1);
+    }
+});
+test('with Settings open, a card\'s ✕ still works', async () => {
+    await until('the tray window', () => trayWindow());
+    await clickGear();
+    await settingsInFront('gear, before the card');
+    const card = oneCard();
+    probe(`trayProbe.moveTo(${card.centreX}, ${card.centreY})`);
+    await pause(300);
+    probe(`trayProbe.moveTo(${card.closeX}, ${card.closeY})`);
+    await pause(300);
+    savePicture('settings-open-close-button');
+    probe('trayProbe.click()');
+    try {
+        await until('the card to leave', () => savedCards() === 0, 5);
+    } finally {
+        askTray('restore-last');
+        await until('the card back', () => savedCards() === 1);
+        await closeSettings();
+    }
+});
+test('with Settings open, a real drag still works', async () => {
+    await until('the tray window', () => trayWindow());
+    await clickGear();
+    await settingsInFront('gear, before the drag');
+    const dropApp = await startDropApp();
+    try {
+        assertEqual(await dragCardToDropApp(), `${GLib.getenv('SCREENSHOT_TRAY_DIR')}/shot-1.png`);
+    } finally {
+        savePicture('settings-open-after-drag');
+        dropApp.force_exit();
+        askTray('restore-last');
+        await until('the card back', () => savedCards() === 1);
+        if (settingsWindow()) {
+            probe('trayProbe.focus("Settings")');
+            await pause(300);
+            await closeSettings();
+        }
+    }
+});
 test('the tray is pinned bottom-left, above other windows, on every workspace', async () => {
     takeScreenshot(2);
     takeScreenshot(3);
@@ -331,7 +435,8 @@ test('a real key press opens Settings', async () => {
     shortcut('shortcut-settings', 'F6');
     await pause(500);
     probe('trayProbe.press("F6")');
-    await until('Settings to open', () => settingsWindow());
+    await settingsInFront('shortcut');
+    await pause(300);
     await closeSettings();
     shortcut('shortcut-settings', '');
 });
