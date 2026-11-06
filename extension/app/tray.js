@@ -334,6 +334,10 @@ export class Tray {
             resizable: false,
             css_classes: this._managed ? ['screenshot-tray'] : [],
         });
+        // A window group of its own. A question open in Settings blocks every window in its
+        // group, as GTK does for dialogs that must be answered, and must never block the cards.
+        this._group = new Gtk.WindowGroup();
+        this._group.add_window(this._window);
         this._window.connect('close-request', () => {
             if (this._managed) {
                 this.clear();   // the add-on keeps the tray running; just empty it

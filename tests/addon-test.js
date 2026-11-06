@@ -300,6 +300,7 @@ function oneCard() {
 }
 
 async function startDropApp() {
+    await until('an earlier drop app to be gone', () => !windowTitled('Drop app'));
     GLib.unlink(`${WORK}/dropped.txt`);
     const dropApp = Gio.Subprocess.new(['gjs', '-m', `${TEST_DIR}/addon-drop-app.js`], Gio.SubprocessFlags.NONE);
     await until('the drop app', () => windowTitled('Drop app'));
@@ -311,6 +312,8 @@ async function startDropApp() {
 async function dragCardToDropApp() {
     const card = oneCard();
     const target = windowTitled('Drop app');
+    probe(`trayProbe.moveTo(${card.centreX - 20}, ${card.centreY})`);   // a hand moves onto the card first
+    await pause(300);
     probe(`trayProbe.drag(${card.centreX}, ${card.centreY}, ${target.x + 250}, ${target.y + 200})`);
     await until('the drop app to get the file', () => GLib.file_test(`${WORK}/dropped.txt`, GLib.FileTest.EXISTS), 8);
     const [, dropped] = GLib.file_get_contents(`${WORK}/dropped.txt`);
@@ -365,6 +368,75 @@ test('with Settings open, a real drag still works', async () => {
             await pause(300);
             await closeSettings();
         }
+    }
+});
+test('a card that was brought back can be dragged right away', async () => {
+    askTray('clear');
+    await until('the tray to empty', () => savedCards() === 0);
+    askTray('restore-last');
+    await until('the card back', () => savedCards() === 1);
+    const dropApp = await startDropApp();
+    try {
+        assertEqual(await dragCardToDropApp(), `${GLib.getenv('SCREENSHOT_TRAY_DIR')}/shot-1.png`);
+    } finally {
+        savePicture('brought-back-after-drag');
+        dropApp.force_exit();
+        if (savedCards() === 0) {
+            askTray('restore-last');
+            await until('the card back', () => savedCards() === 1);
+        }
+    }
+});
+test('with a question open in Settings, the cards still work', async () => {
+    await until('the tray window', () => trayWindow());
+    await clickGear();
+    await settingsInFront('gear, before the question');
+    await pause(400);
+    const win = settingsWindow();
+    probe(`trayProbe.moveTo(${win.x + 443}, ${win.y + 22})`);   // the Shortcuts tab
+    await pause(150);
+    probe('trayProbe.click()');
+    await pause(500);
+    probe(`trayProbe.moveTo(${win.x + 200}, ${win.y + 397})`);  // a row: its question opens
+    await pause(150);
+    probe('trayProbe.click()');
+    await pause(600);
+    savePicture('question-open');
+    let dropApp = null;
+    try {
+        dropApp = await startDropApp();
+        assertEqual(await dragCardToDropApp(), `${GLib.getenv('SCREENSHOT_TRAY_DIR')}/shot-1.png`);
+        dropApp.force_exit();
+        dropApp = null;
+        await until('the card to leave after the drag', () => savedCards() === 0, 5);
+        askTray('restore-last');
+        await until('the card back', () => savedCards() === 1);
+        await pause(800);
+        const card = oneCard();
+        probe(`trayProbe.moveTo(${card.centreX}, ${card.centreY})`);
+        await pause(300);
+        probe(`trayProbe.moveTo(${card.closeX}, ${card.closeY})`);
+        await pause(300);
+        probe('trayProbe.click()');
+        await until('the card to leave after its ✕', () => savedCards() === 0, 5);
+        askTray('restore-last');            // brought back while the question is still open
+        await until('the card back', () => savedCards() === 1);
+        dropApp = await startDropApp();
+        assertEqual(await dragCardToDropApp(), `${GLib.getenv('SCREENSHOT_TRAY_DIR')}/shot-1.png`);
+    } finally {
+        savePicture('question-open-after-click');
+        dropApp?.force_exit();
+        if (savedCards() === 0) {
+            askTray('restore-last');
+            await until('the card back', () => savedCards() === 1);
+        }
+        probe(`trayProbe.moveTo(${win.x + 236}, ${win.y + 377})`);   // the question's Cancel
+        await pause(150);
+        probe('trayProbe.click()');
+        await pause(400);
+        probe('trayProbe.focus("Settings")');
+        await pause(300);
+        await closeSettings();
     }
 });
 test('the tray is pinned bottom-left, above other windows, on every workspace', async () => {
