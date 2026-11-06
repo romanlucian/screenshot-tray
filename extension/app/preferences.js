@@ -138,3 +138,17 @@ export function sameShortcut(one, other) {
     const [, keyOther, modsOther] = Gtk.accelerator_parse(other);
     return keyOne !== 0 && keyOne === keyOther && modsOne === modsOther;
 }
+
+// The key caps for a shortcut, as GNOME Settings shows them: <Shift>plusminus is Shift and ±.
+// An empty list when there is no shortcut, or one that can't be read.
+export function keyCaps(accelerator) {
+    const [ok, key, mods] = Gtk.accelerator_parse(accelerator ?? '');
+    if (!ok || key === 0)
+        return [];
+    const keyLabel = Gtk.accelerator_get_label(key, 0);
+    const full = Gtk.accelerator_get_label(key, mods);
+    // The modifiers come first, each followed by "+". Cutting the key off the end keeps a
+    // "+" key whole.
+    const modifiers = full.slice(0, full.length - keyLabel.length).split('+').filter(Boolean);
+    return [...modifiers, keyLabel];
+}

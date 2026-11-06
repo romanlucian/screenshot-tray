@@ -11,7 +11,7 @@ import Gdk from 'gi://Gdk?version=4.0';
 import Gtk from 'gi://Gtk?version=4.0';
 
 import {
-    GNOME_SHORTCUTS, TRAY_SHORTCUTS, gnomeShortcuts, passesThrough, readShortcut, sameShortcut, traySettings,
+    GNOME_SHORTCUTS, TRAY_SHORTCUTS, gnomeShortcuts, keyCaps, passesThrough, readShortcut, sameShortcut, traySettings,
 } from './preferences.js';
 
 const PROMPT = 'Press the keys you want. A combination GNOME already uses will just do its ' +
@@ -78,19 +78,50 @@ function askForKeys(dialog, title, key, place, places) {
     question.present(dialog);
 }
 
+// Adwaita's own look for key caps, which it gives only to those inside its shortcut label.
+const KEYCAP_STYLE = `.shortcut-keys > .keycap {
+    min-width: 20px; min-height: 25px; padding: 2px 6px; border-radius: 6px; font-size: smaller;
+    background: color-mix(in srgb, currentColor 10%, transparent);
+    box-shadow: inset 0 -2px var(--card-shade-color);
+}`;
+let keycapStyleAdded = false;
+
+function addKeycapStyle() {
+    if (keycapStyleAdded)
+        return;
+    const provider = new Gtk.CssProvider();
+    provider.load_from_string(KEYCAP_STYLE);
+    Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider,
+        Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION);
+    keycapStyleAdded = true;
+}
+
+// The keys of a shortcut as key caps. Adw.ShortcutLabel would spell some keys by their
+// internal names, such as "plusminus" for ±; GNOME Settings doesn't.
+function keysWidget() {
+    addKeycapStyle();
+    const keys = new Gtk.Box({spacing: 4, valign: Gtk.Align.CENTER, css_classes: ['shortcut-keys']});
+    keys.show_keys = accelerator => {
+        keys.accelerator = accelerator;
+        for (let child = keys.get_first_child(); child; child = keys.get_first_child())
+            keys.remove(child);
+        const caps = keyCaps(accelerator);
+        if (caps.length === 0)
+            keys.append(new Gtk.Label({label: 'Not set', css_classes: ['dim-label']}));
+        for (const cap of caps)
+            keys.append(new Gtk.Label({label: cap, css_classes: ['keycap']}));
+    };
+    return keys;
+}
+
 function shortcutRow(dialog, title, key, place, places) {
     const {settings} = place;
     const row = new Adw.ActionRow({title, activatable: true});
-    const label = new Adw.ShortcutLabel({
-        accelerator: current(settings, key),
-        disabled_text: 'Not set',
-        valign: Gtk.Align.CENTER,
-    });
-    row.add_suffix(label);
+    const keys = keysWidget();
+    keys.show_keys(current(settings, key));
+    row.add_suffix(keys);
     row.connect('activated', () => askForKeys(dialog, title, key, place, places));
-    const changed = settings.connect(`changed::${key}`, () => {
-        label.accelerator = current(settings, key);
-    });
+    const changed = settings.connect(`changed::${key}`, () => keys.show_keys(current(settings, key)));
     dialog.connect('closed', () => settings.disconnect(changed));
     return row;
 }

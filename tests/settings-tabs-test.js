@@ -14,7 +14,7 @@ import {assertEqual, finish, requireMadeUpHome, requireMemorySettings, test} fro
 import {button, row, rows, walk} from './widgets.js';
 import {showHelp} from '../extension/app/help.js';
 import {
-    ADDON_VERSION, gnomeShortcuts, passesThrough, readShortcut, sameShortcut, traySettings,
+    ADDON_VERSION, gnomeShortcuts, keyCaps, passesThrough, readShortcut, sameShortcut, traySettings,
 } from '../extension/app/preferences.js';
 import {bringSettingsForward, showSettings} from '../extension/app/settings.js';
 import {Tray} from '../extension/app/tray.js';
@@ -87,8 +87,13 @@ function press(question, keyval, state = 0) {
     throw new Error('the question listens for no keys');
 }
 
+// The keys a row shows: what was saved, and the key caps a person sees.
 function shownShortcut(item) {
-    return [...walk(item)].find(widget => widget instanceof Adw.ShortcutLabel);
+    const keys = [...walk(item)].find(widget => widget instanceof Gtk.Box && widget.has_css_class('shortcut-keys'));
+    return {
+        accelerator: keys.accelerator,
+        caps: [...walk(keys)].filter(widget => widget instanceof Gtk.Label).map(label => label.label),
+    };
 }
 
 function fresh(name, fn) {
@@ -170,6 +175,16 @@ test('Backspace alone clears the shortcut, as in GNOME Settings', () => {
 });
 test('a media key works alone', () => {
     assertEqual(parsed(readShortcut(Gdk.KEY_Launch9, 0).accelerator), [Gdk.keyval_name(Gdk.KEY_Launch9), 0]);
+});
+test('keys show as GNOME Settings shows them, not by their internal names', () => {
+    assertEqual(keyCaps('<Shift>plusminus'), ['Shift', '±']);
+    assertEqual(keyCaps('<Shift>greater'), ['Shift', '>']);
+    assertEqual(keyCaps('<Control><Alt>k'), ['Ctrl', 'Alt', 'K']);
+    assertEqual(keyCaps('<Super><Shift>4'), ['Shift', 'Super', '4']);
+    assertEqual(keyCaps('<Control>plus'), ['Ctrl', '+']);
+    assertEqual(keyCaps('Print'), ['Print']);
+    assertEqual(keyCaps(''), []);
+    assertEqual(keyCaps('not a key'), []);
 });
 test('a modifier alone keeps waiting for the rest', () => {
     for (const key of [Gdk.KEY_Shift_L, Gdk.KEY_Control_R, Gdk.KEY_Alt_L, Gdk.KEY_Super_L, Gdk.KEY_ISO_Level3_Shift, Gdk.KEY_Caps_Lock])
@@ -311,7 +326,8 @@ fresh('Shortcuts lists GNOME\'s three and the tray\'s four, with what is set', a
     assertEqual(rows(pageOf(dialog, 'shortcuts')).map(item => item.title), [...GNOME_TITLES, ...TRAY_TITLES]);
     assertEqual(shownShortcut(row(dialog, 'Whole screen')).accelerator, '<Shift>Print');
     assertEqual(TRAY_TITLES.map(title => shownShortcut(row(dialog, title)).accelerator), ['', '', '', '']);
-    assertEqual(shownShortcut(row(dialog, 'Clear the tray')).disabled_text, 'Not set');
+    assertEqual(shownShortcut(row(dialog, 'Clear the tray')).caps, ['Not set']);
+    assertEqual(shownShortcut(row(dialog, 'Whole screen')).caps, ['Shift', 'Print']);
     await closed(dialog);
 });
 fresh('pressing keys saves a tray shortcut, shows it and closes the question', async () => {
@@ -419,6 +435,7 @@ fresh('a shortcut with an unusual key still shows', async () => {
     const dialog = open('shortcuts');
     assertEqual(shownShortcut(row(dialog, 'Current window')).accelerator, '<Alt>Launch9');
     assertEqual(shownShortcut(row(dialog, 'Open the screenshot tool')).accelerator, '<Shift>plusminus');
+    assertEqual(shownShortcut(row(dialog, 'Open the screenshot tool')).caps, ['Shift', '±']);
     await closed(dialog);
 });
 
